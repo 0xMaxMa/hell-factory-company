@@ -1,0 +1,129 @@
+{
+  "job_id": "binance-earn-bot",
+  "title": "Binance Auto-Earn Bot",
+  "description": "Monitors Binance Simple Earn yield opportunities and automatically subscribes/rebalances to highest APY flexible products",
+  "category": "defi",
+  "version": "1.0.0",
+  "created_at": "2026-04-17",
+  "risk_level": "low",
+  "estimated_earnings": {
+    "note": "Depends on APY at time of execution and deposited amount",
+    "typical_apy_range_usdt": "3% - 8% annually",
+    "typical_apy_range_bnb": "1% - 5% annually",
+    "typical_apy_range_btc": "0.5% - 3% annually",
+    "source": "Binance Simple Earn Flexible Products historical rates"
+  },
+  "apis": {
+    "base_url": "https://api.binance.com",
+    "auth": {
+      "type": "HMAC-SHA256",
+      "headers": ["X-MBX-APIKEY"],
+      "required_permissions": ["Enable Reading", "Enable Spot & Margin Trading"]
+    },
+    "endpoints": {
+      "list_flexible_products": {
+        "method": "GET",
+        "path": "/sapi/v1/simple-earn/flexible/list",
+        "auth_required": true,
+        "rate_limit": "150 weight per IP",
+        "key_response_fields": [
+          "productId",
+          "asset",
+          "latestAnnualPercentageRate",
+          "tierAnnualPercentageRate",
+          "canPurchase",
+          "canRedeem",
+          "minPurchaseAmount",
+          "status"
+        ]
+      },
+      "get_flexible_position": {
+        "method": "GET",
+        "path": "/sapi/v1/simple-earn/flexible/position",
+        "auth_required": true,
+        "rate_limit": "150 weight per IP",
+        "key_response_fields": [
+          "productId",
+          "asset",
+          "totalAmount",
+          "latestAnnualPercentageRate",
+          "autoSubscribeStatus",
+          "dailyBonus",
+          "cumulativeBonusRewards"
+        ]
+      },
+      "subscribe_flexible": {
+        "method": "POST",
+        "path": "/sapi/v1/simple-earn/flexible/subscribe",
+        "auth_required": true,
+        "rate_limit": "1 per 3s per account (UID limit)",
+        "required_params": ["productId", "amount"],
+        "optional_params": ["autoSubscribe", "sourceAccount", "recvWindow", "timestamp"]
+      },
+      "redeem_flexible": {
+        "method": "POST",
+        "path": "/sapi/v1/simple-earn/flexible/redeem",
+        "auth_required": true,
+        "rate_limit": "1 per 3s per account (UID limit)",
+        "required_params": ["productId"],
+        "optional_params": ["redeemAll", "amount", "destAccount", "recvWindow", "timestamp"]
+      },
+      "get_personal_left_quota": {
+        "method": "GET",
+        "path": "/sapi/v1/simple-earn/flexible/personalLeftQuota",
+        "auth_required": true,
+        "rate_limit": "150 weight per IP",
+        "required_params": ["productId"]
+      },
+      "set_auto_subscribe": {
+        "method": "POST",
+        "path": "/sapi/v1/simple-earn/flexible/setAutoSubscribe",
+        "auth_required": true,
+        "rate_limit": "150 weight per IP",
+        "required_params": ["productId", "autoSubscribe"]
+      },
+      "get_rewards_history": {
+        "method": "GET",
+        "path": "/sapi/v1/simple-earn/flexible/history/rewardsRecord",
+        "auth_required": true,
+        "rate_limit": "150 weight per IP",
+        "optional_params": ["productId", "asset", "startTime", "endTime", "current", "size"]
+      },
+      "get_spot_account": {
+        "method": "GET",
+        "path": "/api/v3/account",
+        "auth_required": true,
+        "rate_limit": "20 weight per IP",
+        "notes": "Used to check available balance before subscribing"
+      }
+    },
+    "general_rate_limits": {
+      "ip_limit": "1200 weight per minute (shared across IP-based endpoints)",
+      "uid_limit": "180000 weight per minute (shared across UID-based endpoints)",
+      "subscribe_redeem_limit": "1 request per 3 seconds per account"
+    }
+  },
+  "packages": {
+    "python": {
+      "required": [
+        "python-binance>=1.0.19",
+        "python-dotenv>=1.0.0",
+        "requests>=2.31.0",
+        "tabulate>=0.9.0"
+      ],
+      "optional": [
+        "schedule>=1.2.0",
+        "loguru>=0.7.0"
+      ],
+      "python_version": ">=3.8"
+    }
+  },
+  "strategy": {
+    "name": "highest_apy_first",
+    "description": "Always subscribe to the flexible product with the highest latestAnnualPercentageRate",
+    "rebalance_trigger": "When a new product APY exceeds current position APY by threshold",
+    "rebalance_threshold_pct": 0.5,
+    "target_assets": ["USDT", "USDC", "BNB", "BTC", "ETH"],
+    "min_subscribe_amount_usdt_equiv": 10
+  }
+}
