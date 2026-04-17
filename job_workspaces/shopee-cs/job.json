@@ -1,0 +1,42 @@
+{
+  "name": "shopee-cs",
+  "description": "Shopee Customer Service Chatbot — polls Shopee Open API v2 seller chat for new buyer messages, classifies intent (pricing inquiry, delivery status, return request, general), and auto-replies with rule-based templates. Reduces manual response time and improves buyer satisfaction metrics.",
+  "category": "automation",
+  "status": "draft",
+  "created_at": "2026-04-17T08:45:00Z",
+  "updated_at": "2026-04-17T08:45:00Z",
+  "estimated_earnings": "3000-8000 THB/month per shop (saved labor cost) or 500-2000 THB one-time setup fee per client",
+  "risk_level": "low",
+  "requires": {
+    "wallet": false,
+    "initial_capital": "0 (no cost — uses free Shopee Open Platform developer account)",
+    "apis": [
+      {
+        "name": "Shopee Open Platform API v2",
+        "base_url_prod": "https://partner.shopeemobile.com/api/v2",
+        "base_url_test": "https://partner.test-stable.shopeemobile.com/api/v2",
+        "auth": "OAuth2 + HMAC-SHA256 signature",
+        "required_credentials": ["SHOPEE_PARTNER_ID", "SHOPEE_PARTNER_KEY", "SHOPEE_SHOP_ID", "SHOPEE_ACCESS_TOKEN", "SHOPEE_REFRESH_TOKEN"],
+        "key_endpoints": [
+          "GET  /sellerchat/get_conversation_list   — list active buyer conversations",
+          "GET  /sellerchat/get_message             — fetch messages from a conversation",
+          "POST /sellerchat/send_message            — send reply message to buyer",
+          "GET  /order/get_order_detail             — get order detail for shipping/status queries",
+          "POST /sellerchat/read_conversation       — mark conversation as read"
+        ],
+        "token_ttl_seconds": 14400,
+        "notes": "access_token valid 4 hours; use refresh_token to renew without full re-auth"
+      }
+    ],
+    "packages": [
+      "requests>=2.31.0",
+      "python-dotenv>=1.0.0",
+      "schedule>=1.2.0",
+      "colorlog>=6.7.0"
+    ]
+  },
+  "tags": ["shopee", "chatbot", "customer-service", "ecommerce", "automation", "thailand", "messaging"],
+  "run_count": 0,
+  "total_earnings": "0",
+  "last_run": null
+}
