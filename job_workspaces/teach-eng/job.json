@@ -1,0 +1,20 @@
+{
+  "name": "teach-eng",
+  "description": "Online English teaching toolkit — lesson planner, activity generator, and platform guide for teaching kids and adults via Cambly, iTalki, Preply, VIPKid, etc.",
+  "category": "education",
+  "status": "ready",
+  "created_at": "2026-04-17T10:03:00Z",
+  "updated_at": "2026-04-17T10:25:00Z",
+  "estimated_earnings": "$1,000–$10,000+/month (20–40 hrs/week)",
+  "risk_level": "low",
+  "requires": {
+    "wallet": false,
+    "initial_capital": "$0",
+    "apis": ["Telegram Bot API"],
+    "packages": ["tabulate", "python-dotenv", "python-telegram-bot"]
+  },
+  "tags": ["education", "english", "teaching", "online", "freelance", "kids", "adults"],
+  "run_count": 0,
+  "total_earnings": "0",
+  "last_run": null
+}
