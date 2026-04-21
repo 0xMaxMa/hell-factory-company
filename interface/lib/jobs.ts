@@ -66,6 +66,8 @@ export function getRunbook(name: string): string | null {
   return fs.readFileSync(p, 'utf-8')
 }
 
+export { parseEarnings } from './utils'
+
 export function getEarningsDisplay(job: JobWorkspace): string {
   if (typeof job.estimated_earnings === 'string') return job.estimated_earnings
   const e = job.estimated_earnings as Record<string, unknown>

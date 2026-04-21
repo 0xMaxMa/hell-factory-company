@@ -9,9 +9,9 @@ test.describe('Config page', () => {
     await expect(page.getByText('Configuration')).toBeVisible()
   })
 
-  test('shows Gateway, Wallet and Job Settings sections', async ({ page }) => {
-    await expect(page.getByText('Gateway', { exact: true })).toBeVisible()
-    await expect(page.getByText('Wallet', { exact: true })).toBeVisible()
+  test('shows Gateway, Analytics and Job Settings sections', async ({ page }) => {
+    await expect(page.getByText('Gateway', { exact: true }).first()).toBeVisible()
+    await expect(page.getByText('Analytics', { exact: true })).toBeVisible()
     await expect(page.getByText('Job Settings', { exact: true })).toBeVisible()
   })
 
@@ -35,10 +35,10 @@ test.describe('Config page', () => {
     await expect(input).toHaveValue('my-agent')
   })
 
-  test('can type BNB Address', async ({ page }) => {
-    const input = page.getByPlaceholder('0x...')
-    await input.fill('0xdeadbeef1234')
-    await expect(input).toHaveValue('0xdeadbeef1234')
+  test('can type BSCScan API Key in Analytics section', async ({ page }) => {
+    const input = page.locator('.card').filter({ hasText: 'Analytics' }).locator('input[type="password"]')
+    await input.fill('myapikey123')
+    await expect(input).toHaveValue('myapikey123')
   })
 
   test('save persists config and shows confirmation', async ({ page }) => {

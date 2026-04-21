@@ -1,7 +1,13 @@
 'use client'
 import useSWR from 'swr'
 import Link from 'next/link'
-import { JobWorkspace } from '@/lib/types'
+import dynamic from 'next/dynamic'
+import TransactionList from '@/components/TransactionList'
+import { JobWorkspace, Transaction } from '@/lib/types'
+
+const WalletHistoryChart = dynamic(() => import('@/components/charts/WalletHistoryChart'), { ssr: false })
+const JobRunsChart = dynamic(() => import('@/components/charts/JobRunsChart'), { ssr: false })
+const JobEarningsChart = dynamic(() => import('@/components/charts/JobEarningsChart'), { ssr: false })
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
 
@@ -25,12 +31,17 @@ function earningsDisplay(job: JobWorkspace): string {
 
 export default function Dashboard() {
   const { data: jobsData } = useSWR('/api/jobs?all=0', fetcher, { refreshInterval: 10000 })
-  const { data: walletData } = useSWR('/api/wallet', fetcher, { refreshInterval: 30000 })
-  const { data: gwData } = useSWR('/api/gateway/status', fetcher, { refreshInterval: 5000 })
+  const { data: walletData } = useSWR('/api/wallet', fetcher, { refreshInterval: 60000 })
+  const { data: historyData } = useSWR('/api/wallet/history', fetcher, { refreshInterval: 60000 })
+  const { data: txData } = useSWR('/api/wallet/transactions', fetcher, { refreshInterval: 120000 })
+  const { data: sessionsData } = useSWR('/api/sessions', fetcher, { refreshInterval: 5000 })
 
   const jobs: JobWorkspace[] = jobsData?.jobs || []
   const wallet = walletData
-  const activeSessions = gwData?.agents?.flatMap((a: { sessions?: unknown[] }) => a.sessions || []) || []
+  const walletHistory = historyData?.history || []
+  const transactions: Transaction[] = txData?.transactions || []
+  const sessions = sessionsData?.sessions || []
+  const activeSessions = sessions.filter((s: { status: string }) => s.status === 'active')
 
   const readyJobs = jobs.filter(j => j.status === 'ready')
   const draftJobs = jobs.filter(j => j.status === 'draft')
@@ -66,7 +77,7 @@ export default function Dashboard() {
             {activeSessions.length > 0 && <span className="animate-pulse-glow" style={{ marginLeft: 8, color: 'var(--success)', fontSize: 16 }}>●</span>}
           </div>
           <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
-            active sessions running
+            {sessions.length} total · {activeSessions.length} active
           </div>
         </div>
         <div className="card">
@@ -90,20 +101,47 @@ export default function Dashboard() {
             <span className="badge badge-green">{activeSessions.length} running</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {activeSessions.map((s: { session_id: string; started_at: string }) => (
-              <div key={s.session_id} className="card-2" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            {activeSessions.map((s: { id: string; jobName: string; createdAt: string }) => (
+              <div key={s.id} className="card-2" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ color: 'var(--success)' }} className="animate-pulse-glow">●</span>
-                  <span style={{ fontFamily: 'monospace', fontSize: 13 }}>{s.session_id}</span>
+                  <span style={{ fontFamily: 'monospace', fontSize: 13 }}>{s.id}</span>
                 </div>
                 <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  {s.started_at ? new Date(s.started_at).toLocaleTimeString() : ''}
+                  {s.createdAt ? new Date(s.createdAt).toLocaleTimeString() : ''}
                 </span>
               </div>
             ))}
           </div>
         </div>
       )}
+
+      {/* Analytics Charts */}
+      <div className="card">
+        <div style={{ fontWeight: 600, marginBottom: 16 }}>📊 Portfolio Value (Daily)</div>
+        <WalletHistoryChart data={walletHistory} />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div className="card">
+          <div style={{ fontWeight: 600, marginBottom: 12 }}>🔁 Job Runs</div>
+          <JobRunsChart jobs={jobs} />
+        </div>
+        <div className="card">
+          <div style={{ fontWeight: 600, marginBottom: 12 }}>💵 Earnings per Job (BNB)</div>
+          <JobEarningsChart jobs={jobs} bnbPrice={wallet?.bnb_price ? parseFloat(wallet.bnb_price) : undefined} />
+        </div>
+      </div>
+
+      {/* Transaction list */}
+      <div className="card">
+        <div style={{ fontWeight: 600, marginBottom: 16 }}>💳 Recent Incoming Transactions</div>
+        <TransactionList
+          txs={transactions}
+          loading={!txData && !txData?.error}
+          error={txData?.error}
+        />
+      </div>
 
       {/* Job list */}
       <div className="card">

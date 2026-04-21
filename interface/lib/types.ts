@@ -41,9 +41,21 @@ export interface AppConfig {
   gatewayUrl: string
   apiKey: string
   agentId: string
-  bnbAddress: string
   bscscanApiKey: string
   workspacePath: string
   maxConcurrent: number
   autoRun: boolean
+}
+
+export interface WalletHistoryEntry {
+  date: string
+  total_usd: number
+}
+
+export interface Transaction {
+  hash: string
+  from: string
+  value_bnb: string
+  timestamp: number
+  job_name: string | null
 }

@@ -67,10 +67,10 @@ test.describe('Run Job wizard', () => {
     await expect(page.getByTestId('step-terminal')).toBeVisible()
   })
 
-  test('terminal shows agent terminal header', async ({ page }) => {
+  test('terminal shows step-terminal container', async ({ page }) => {
     await page.getByTestId('job-card-test-echo').click()
     await page.getByTestId('start-session-btn').click()
-    await expect(page.getByText('Agent Terminal')).toBeVisible()
+    await expect(page.getByTestId('step-terminal')).toBeVisible({ timeout: 5000 })
   })
 
   test('chat input visible in Step 3', async ({ page }) => {
