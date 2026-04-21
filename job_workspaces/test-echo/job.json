@@ -13,8 +13,13 @@
     "apis": [],
     "packages": []
   },
-  "tags": ["test", "echo", "hello-world"],
-  "run_count": 0,
+  "tags": [
+    "test",
+    "echo",
+    "hello-world"
+  ],
+  "run_count": 21,
   "total_earnings": "0",
-  "last_run": null
+  "last_run": "2026-04-21T07:35:32Z",
+  "enabled": true
 }

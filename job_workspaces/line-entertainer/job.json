@@ -16,7 +16,12 @@
   },
   "risk_level": "low",
   "risk_notes": "LINE API is stable and well-documented. Main risks: LINE rate limits (1000 push messages/month on free plan), webhook downtime, group admin removing the bot.",
-  "target_markets": ["Thailand", "Japan", "Taiwan", "Indonesia"],
+  "target_markets": [
+    "Thailand",
+    "Japan",
+    "Taiwan",
+    "Indonesia"
+  ],
   "freelance_platforms": [
     {
       "platform": "Fiverr",
@@ -114,5 +119,6 @@
       "FollowEvent (user adds bot as friend)",
       "PostbackEvent (interactive button clicks)"
     ]
-  }
+  },
+  "enabled": false
 }

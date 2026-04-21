@@ -18,7 +18,13 @@
       "python-dotenv"
     ]
   },
-  "tags": ["affiliate", "shopee", "southeast-asia", "content", "passive-income"],
+  "tags": [
+    "affiliate",
+    "shopee",
+    "southeast-asia",
+    "content",
+    "passive-income"
+  ],
   "run_count": 0,
   "total_earnings": "0",
   "last_run": null,
@@ -26,7 +32,16 @@
     "commission_range": "2.5%-12% base, up to 25-40% with seller CommsXtra",
     "attribution_window": "7 days (last-click model)",
     "validation_period": "2 months before commission confirmed",
-    "markets": ["Thailand", "Singapore", "Indonesia", "Malaysia", "Philippines", "Vietnam", "Taiwan"],
+    "markets": [
+      "Thailand",
+      "Singapore",
+      "Indonesia",
+      "Malaysia",
+      "Philippines",
+      "Vietnam",
+      "Taiwan"
+    ],
     "api_auth": "SHA256 HMAC, 100 req/min rate limit, 4h token validity"
-  }
+  },
+  "enabled": false
 }

@@ -17,8 +17,13 @@
     "base_url": "https://api.binance.com",
     "auth": {
       "type": "HMAC-SHA256",
-      "headers": ["X-MBX-APIKEY"],
-      "required_permissions": ["Enable Reading", "Enable Spot & Margin Trading"]
+      "headers": [
+        "X-MBX-APIKEY"
+      ],
+      "required_permissions": [
+        "Enable Reading",
+        "Enable Spot & Margin Trading"
+      ]
     },
     "endpoints": {
       "list_flexible_products": {
@@ -57,37 +62,65 @@
         "path": "/sapi/v1/simple-earn/flexible/subscribe",
         "auth_required": true,
         "rate_limit": "1 per 3s per account (UID limit)",
-        "required_params": ["productId", "amount"],
-        "optional_params": ["autoSubscribe", "sourceAccount", "recvWindow", "timestamp"]
+        "required_params": [
+          "productId",
+          "amount"
+        ],
+        "optional_params": [
+          "autoSubscribe",
+          "sourceAccount",
+          "recvWindow",
+          "timestamp"
+        ]
       },
       "redeem_flexible": {
         "method": "POST",
         "path": "/sapi/v1/simple-earn/flexible/redeem",
         "auth_required": true,
         "rate_limit": "1 per 3s per account (UID limit)",
-        "required_params": ["productId"],
-        "optional_params": ["redeemAll", "amount", "destAccount", "recvWindow", "timestamp"]
+        "required_params": [
+          "productId"
+        ],
+        "optional_params": [
+          "redeemAll",
+          "amount",
+          "destAccount",
+          "recvWindow",
+          "timestamp"
+        ]
       },
       "get_personal_left_quota": {
         "method": "GET",
         "path": "/sapi/v1/simple-earn/flexible/personalLeftQuota",
         "auth_required": true,
         "rate_limit": "150 weight per IP",
-        "required_params": ["productId"]
+        "required_params": [
+          "productId"
+        ]
       },
       "set_auto_subscribe": {
         "method": "POST",
         "path": "/sapi/v1/simple-earn/flexible/setAutoSubscribe",
         "auth_required": true,
         "rate_limit": "150 weight per IP",
-        "required_params": ["productId", "autoSubscribe"]
+        "required_params": [
+          "productId",
+          "autoSubscribe"
+        ]
       },
       "get_rewards_history": {
         "method": "GET",
         "path": "/sapi/v1/simple-earn/flexible/history/rewardsRecord",
         "auth_required": true,
         "rate_limit": "150 weight per IP",
-        "optional_params": ["productId", "asset", "startTime", "endTime", "current", "size"]
+        "optional_params": [
+          "productId",
+          "asset",
+          "startTime",
+          "endTime",
+          "current",
+          "size"
+        ]
       },
       "get_spot_account": {
         "method": "GET",
@@ -123,7 +156,14 @@
     "description": "Always subscribe to the flexible product with the highest latestAnnualPercentageRate",
     "rebalance_trigger": "When a new product APY exceeds current position APY by threshold",
     "rebalance_threshold_pct": 0.5,
-    "target_assets": ["USDT", "USDC", "BNB", "BTC", "ETH"],
+    "target_assets": [
+      "USDT",
+      "USDC",
+      "BNB",
+      "BTC",
+      "ETH"
+    ],
     "min_subscribe_amount_usdt_equiv": 10
-  }
+  },
+  "enabled": false
 }
