@@ -14,7 +14,7 @@
     "packages": ["tabulate", "python-dotenv", "python-telegram-bot"]
   },
   "tags": ["education", "english", "teaching", "online", "freelance", "kids", "adults"],
-  "run_count": 0,
+  "run_count": 1,
   "total_earnings": "0",
-  "last_run": null
+  "last_run": "2026-04-21T07:29:00Z"
 }

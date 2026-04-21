@@ -1,0 +1,25 @@
+{
+  "name": "test-paid",
+  "description": "Paid test job \u2014 used for e2e testing of payment flow. Costs $5 upfront to verify payment gate works correctly.",
+  "category": "test",
+  "status": "ready",
+  "created_at": "2026-04-21T00:00:00Z",
+  "updated_at": "2026-04-21T00:00:00Z",
+  "estimated_earnings": "$5 service fee",
+  "risk_level": "low",
+  "requires": {
+    "wallet": false,
+    "initial_capital": "$5",
+    "apis": [],
+    "packages": []
+  },
+  "tags": [
+    "test",
+    "paid",
+    "e2e"
+  ],
+  "run_count": 11,
+  "total_earnings": "0",
+  "last_run": "2026-04-21T07:01:05Z",
+  "enabled": true
+}

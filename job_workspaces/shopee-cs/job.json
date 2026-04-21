@@ -16,7 +16,13 @@
         "base_url_prod": "https://partner.shopeemobile.com/api/v2",
         "base_url_test": "https://partner.test-stable.shopeemobile.com/api/v2",
         "auth": "OAuth2 + HMAC-SHA256 signature",
-        "required_credentials": ["SHOPEE_PARTNER_ID", "SHOPEE_PARTNER_KEY", "SHOPEE_SHOP_ID", "SHOPEE_ACCESS_TOKEN", "SHOPEE_REFRESH_TOKEN"],
+        "required_credentials": [
+          "SHOPEE_PARTNER_ID",
+          "SHOPEE_PARTNER_KEY",
+          "SHOPEE_SHOP_ID",
+          "SHOPEE_ACCESS_TOKEN",
+          "SHOPEE_REFRESH_TOKEN"
+        ],
         "key_endpoints": [
           "GET  /sellerchat/get_conversation_list   — list active buyer conversations",
           "GET  /sellerchat/get_message             — fetch messages from a conversation",
@@ -35,8 +41,17 @@
       "colorlog>=6.7.0"
     ]
   },
-  "tags": ["shopee", "chatbot", "customer-service", "ecommerce", "automation", "thailand", "messaging"],
+  "tags": [
+    "shopee",
+    "chatbot",
+    "customer-service",
+    "ecommerce",
+    "automation",
+    "thailand",
+    "messaging"
+  ],
   "run_count": 0,
   "total_earnings": "0",
-  "last_run": null
+  "last_run": null,
+  "enabled": false
 }
