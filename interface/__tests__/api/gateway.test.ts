@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -29,37 +29,50 @@ describe('GET /api/gateway/status', () => {
 })
 
 describe('POST /api/gateway/messages', () => {
-  it('proxies non-stream request and returns JSON', async () => {
-    const mockData = { response: 'hello from agent' }
+  it('proxies request and returns JSON response', async () => {
+    const encoder = new TextEncoder()
+    const sseData = [
+      'data: {"type":"text_delta","text":"hello"}\n\n',
+      'data: {"type":"result","text":"hello from agent"}\n\n',
+      'data: [DONE]\n\n',
+    ]
+    let pushIndex = 0
+    const stream = new ReadableStream({
+      pull(controller) {
+        if (pushIndex < sseData.length) {
+          controller.enqueue(encoder.encode(sseData[pushIndex++]))
+        } else {
+          controller.close()
+        }
+      }
+    })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => mockData,
-      body: null,
+      body: stream,
     }))
     const { POST } = await import('@/app/api/gateway/messages/route')
     const req = new Request('http://localhost/api/gateway/messages', {
       method: 'POST',
-      body: JSON.stringify({ message: 'hello', session_id: 'test-1', stream: false }),
+      body: JSON.stringify({ message: 'hello', session_id: 'test-1' }),
     })
     const res = await POST(req)
     const body = await res.json()
     expect(body.response).toBe('hello from agent')
   })
 
-  it('returns SSE response for stream=true requests', async () => {
-    const streamBody = new ReadableStream()
+  it('returns 502 when gateway is down', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      body: streamBody,
+      ok: false,
+      status: 502,
+      body: null,
     }))
     const { POST } = await import('@/app/api/gateway/messages/route')
     const req = new Request('http://localhost/api/gateway/messages', {
       method: 'POST',
-      body: JSON.stringify({ message: 'go', session_id: 'test-2', stream: true }),
+      body: JSON.stringify({ message: 'go', session_id: 'test-2' }),
     })
     const res = await POST(req)
-    expect(res.headers.get('Content-Type')).toBe('text/event-stream')
+    expect(res.status).toBe(502)
   })
 })
