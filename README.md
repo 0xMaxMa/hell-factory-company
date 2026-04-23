@@ -123,6 +123,21 @@ Runs a job from `job_workspaces/`, starts the bot, handles payment verification,
 
 ---
 
+### /crypto-wallet — Manage EVM Wallet
+
+Manage an EVM-compatible crypto wallet (BNB Chain / Ethereum) for receiving payments.
+
+```
+/crypto-wallet create    # Generate new wallet, save private key to .env
+/crypto-wallet address   # Show wallet address (safe to share)
+```
+
+**Rules:**
+- Wallet address is safe to share — works on both BNB Chain (BEP-20) and Ethereum
+- **Private key is never revealed** — stored securely in agent `.env`
+
+---
+
 ### Setting Up Skill Symlinks
 
 Skills source code lives in this project at `skills/`. Claude Gateway reads skills from each agent's workspace directory. To connect them, create symlinks **from** the agent workspace **to** this project:
