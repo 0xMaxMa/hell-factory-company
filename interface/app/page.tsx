@@ -50,7 +50,13 @@ export default function Dashboard() {
 
   const readyJobs = jobs.filter(j => j.status === 'ready')
   const draftJobs = jobs.filter(j => j.status === 'draft')
-  const totalRuns = jobs.reduce((sum, j) => sum + (j.run_count || 0), 0)
+  const sessionCountBySlug: Record<string, number> = {}
+  for (const s of sessions) {
+    const slug = s.jobSlug || s.jobName || ''
+    sessionCountBySlug[slug] = (sessionCountBySlug[slug] || 0) + 1
+  }
+  const jobsWithRuns = jobs.map(j => ({ ...j, run_count: sessionCountBySlug[j.slug] || sessionCountBySlug[j.name] || 0 }))
+  const totalRuns = Object.values(sessionCountBySlug).reduce((sum: number, v) => sum + (v as number), 0)
 
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -200,7 +206,7 @@ export default function Dashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <div className="card">
           <div style={{ fontWeight: 600, marginBottom: 12 }}>🔁 Job Runs</div>
-          <JobRunsChart jobs={jobs} payments={payments} />
+          <JobRunsChart jobs={jobsWithRuns} payments={payments} />
         </div>
         <div className="card">
           <div style={{ fontWeight: 600, marginBottom: 12 }}>💵 Earnings per Job</div>
@@ -222,13 +228,13 @@ export default function Dashboard() {
             ▶ Run Job
           </Link>
         </div>
-        {jobs.length === 0 ? (
+        {jobsWithRuns.length === 0 ? (
           <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '20px 0', textAlign: 'center' }}>
             No job workspaces found. Add jobs to <code style={{ fontSize: 12 }}>job_workspaces/</code>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {jobs.map(job => (
+            {jobsWithRuns.map(job => (
               <div key={job.name} className="card-2" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

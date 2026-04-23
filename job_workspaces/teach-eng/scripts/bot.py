@@ -213,6 +213,14 @@ async def handle_answer(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         active_chat_id = None
         session_state.pop(chat_id, None)
         log.info(f"Session ended: chat_id={chat_id}")
+    elif not any(p.get("type") == "question" for p in payloads):
+        next_payloads = await send_with_typing(ctx, chat_id, "ข้อถัดไปครับ")
+        await deliver_all(ctx, chat_id, next_payloads)
+        if any(p.get("type") == "summary" for p in next_payloads):
+            await asyncio.to_thread(send_to_agent, "/end")
+            active_chat_id = None
+            session_state.pop(chat_id, None)
+            log.info(f"Session ended: chat_id={chat_id}")
 
 
 async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
