@@ -2,20 +2,19 @@
 import { useState, useEffect, useRef, Suspense } from 'react'
 import useSWR from 'swr'
 import ReactMarkdown, { Components } from 'react-markdown'
-import rehypeRaw from 'rehype-raw'
+import remarkBreaks from 'remark-breaks'
+import remarkGfm from 'remark-gfm'
 import { Session } from '@/lib/sessions'
 import { JobWorkspace } from '@/lib/types'
 import ActiveSessionsTable from '@/components/ActiveSessionsTable'
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
 
-function nl2md(text: string) {
-  return text.replace(/\n/g, '<br/>')
-}
 
 function earningsDisplay(j: JobWorkspace): string {
   if (typeof j.estimated_earnings === 'string') return j.estimated_earnings
   const e = j.estimated_earnings as Record<string, unknown>
+  if (!e) return 'N/A'
   if (e.per_project_min !== undefined) return `$${e.per_project_min}–$${e.per_project_max}/project`
   return 'N/A'
 }
@@ -25,7 +24,7 @@ function earningsDisplay(j: JobWorkspace): string {
 function JobSelector({ jobs, selected, onSelect }: {
   jobs: JobWorkspace[]
   selected: string
-  onSelect: (name: string) => void
+  onSelect: (name: string, slug: string) => void
 }) {
   return (
     <div className="card" data-testid="step-job-selector">
@@ -37,13 +36,13 @@ function JobSelector({ jobs, selected, onSelect }: {
         )}
         {jobs.map(j => (
           <div
-            key={j.name}
-            onClick={() => onSelect(j.name)}
-            data-testid={`job-card-${j.name}`}
+            key={j.slug}
+            onClick={() => onSelect(j.name, j.slug)}
+            data-testid={`job-card-${j.slug}`}
             style={{
               padding: '12px 14px', borderRadius: 10, cursor: 'pointer',
-              border: `2px solid ${selected === j.name ? 'var(--accent)' : 'var(--border)'}`,
-              background: selected === j.name ? 'rgba(0,102,255,0.09)' : 'var(--surface-2)',
+              border: `2px solid ${selected === j.slug ? 'var(--accent)' : 'var(--border)'}`,
+              background: selected === j.slug ? 'rgba(0,102,255,0.09)' : 'var(--surface-2)',
               transition: 'all 0.15s',
             }}
           >
@@ -64,8 +63,9 @@ function JobSelector({ jobs, selected, onSelect }: {
 
 // ── Step 2: Session Picker ───────────────────────────────────────────────────
 
-function SessionPicker({ jobName, onStart }: {
+function SessionPicker({ jobName, jobSlug, onStart }: {
   jobName: string
+  jobSlug: string
   onStart: (session: Session) => void
 }) {
   const [mode, setMode] = useState<'new' | 'resume'>('new')
@@ -73,12 +73,14 @@ function SessionPicker({ jobName, onStart }: {
   const [loading, setLoading] = useState(false)
 
   const { data } = useSWR<{ sessions: Session[] }>('/api/sessions', fetcher)
-  const existing = (data?.sessions ?? []).filter(s => s.jobName === jobName && s.status !== 'completed')
+  const existing = (data?.sessions ?? []).filter(s =>
+    (s.jobSlug === jobSlug || s.jobName === jobName) && s.status !== 'completed'
+  )
 
   useEffect(() => {
     setMode(existing.length > 0 ? 'resume' : 'new')
     setSelectedSessionId(existing[0]?.id ?? '')
-  }, [jobName, existing.length])
+  }, [jobSlug, existing.length])
 
   async function handleStart() {
     setLoading(true)
@@ -87,7 +89,7 @@ function SessionPicker({ jobName, onStart }: {
         const res = await fetch('/api/sessions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jobName }),
+          body: JSON.stringify({ jobName, jobSlug }),
         })
         const data = await res.json()
         onStart(data.session)
@@ -194,13 +196,29 @@ function AgentTerminal({ session, jobName, onBack }: {
   const [chatInput, setChatInput] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
+  const runningRef = useRef(false)
 
   useEffect(() => {
-    fetch(`/api/sessions/${session.id}/messages`)
-      .then(r => r.json())
-      .then(({ messages: hist }) => {
-        if (hist?.length) setMessages(hist.map((m: Msg) => ({ role: m.role, content: m.content })))
-      })
+    let cancelled = false
+    function loadMessages() {
+      // Don't overwrite messages while streaming — avoids race condition where
+      // polling replaces the freshly-set agentReply before saveMessage finishes.
+      if (runningRef.current) return
+      fetch(`/api/sessions/${session.id}/messages`)
+        .then(r => r.json())
+        .then(({ messages: hist }) => {
+          if (!cancelled && hist?.length) {
+            setMessages(hist.map((m: Msg) => ({ role: m.role, content: m.content })))
+          }
+        })
+        .catch(() => {})
+    }
+    loadMessages()
+    const interval = setInterval(loadMessages, 3000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
   }, [session.id])
 
   useEffect(() => {
@@ -216,7 +234,13 @@ function AgentTerminal({ session, jobName, onBack }: {
   }
 
   async function runJob(message?: string) {
+    const isJobRun = !message
     const msg = message ?? `/job-run ${jobName}`
+    if (isJobRun) {
+      setMessages(prev => [...prev, { role: 'user', content: `▶ Run Job: ${jobName}` }])
+      await saveMessage('user', `▶ Run Job: ${jobName}`)
+    }
+    runningRef.current = true
     setRunning(true)
     setStreaming('')
     await fetch(`/api/sessions/${session.id}`, {
@@ -227,58 +251,52 @@ function AgentTerminal({ session, jobName, onBack }: {
 
     abortRef.current = new AbortController()
     let agentReply = ''
+    const startedAt = Date.now()
+
+    // Background poll: show latest content from gateway JSONL every 5s while HTTP request is pending
+    const pollInterval = setInterval(async () => {
+      if (!runningRef.current) return
+      try {
+        const syncRes = await fetch(`/api/sessions/${session.id}/gateway-sync?since=${startedAt}`)
+        if (syncRes.ok) {
+          const { content } = await syncRes.json()
+          if (content && content.trim()) setStreaming(content)
+        }
+      } catch {}
+    }, 5000)
+
     try {
+      // Server reads complete SSE from gateway and returns JSON when done.
+      // No SSE to browser = no browser connection drops.
       const res = await fetch('/api/gateway/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg, session_id: session.id, stream: true }),
+        body: JSON.stringify({ message: msg, session_id: session.id }),
         signal: abortRef.current.signal,
       })
-      const reader = res.body?.getReader()
-      const decoder = new TextDecoder()
-      if (!reader) return
-
-      const flushTurn = async () => {
-        if (!agentReply.trim()) return
-        const turn = agentReply
-        agentReply = ''
-        setMessages(prev => [...prev, { role: 'agent', content: turn }])
-        await saveMessage('agent', turn)
-        setStreaming('')
-      }
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        const text = decoder.decode(value)
-        const lines = text.split('\n').filter(l => l.startsWith('data:'))
-        for (const line of lines) {
-          const data = line.slice(5).trim()
-          if (!data || data === '[DONE]') continue
-          try {
-            const parsed = JSON.parse(data)
-            if (parsed.type === 'tool_use' || parsed.type === 'result') {
-              await flushTurn()
-              continue
-            }
-            const content = parsed.text || parsed.delta?.text || parsed.content || ''
-            if (content) {
-              agentReply += content
-              setStreaming(prev => prev + content)
-            }
-          } catch { /* ignore non-JSON */ }
-        }
-      }
+      const data = await res.json()
+      agentReply = data.response || data.result || data.text || ''
     } catch (e) {
       if ((e as Error).name !== 'AbortError') {
-        agentReply += `\nError: ${String(e)}`
-        setStreaming(prev => prev + `\nError: ${String(e)}`)
+        agentReply = `Error: ${String(e)}`
       }
     } finally {
+      clearInterval(pollInterval)
+      // Fallback: if fetch failed or returned empty, pull from gateway JSONL
+      if (!agentReply.trim()) {
+        try {
+          const syncRes = await fetch(`/api/sessions/${session.id}/gateway-sync?since=${startedAt}`)
+          if (syncRes.ok) {
+            const { content } = await syncRes.json()
+            if (content) agentReply = content
+          }
+        } catch {}
+      }
       if (agentReply.trim()) {
         setMessages(prev => [...prev, { role: 'agent', content: agentReply }])
         await saveMessage('agent', agentReply)
       }
+      runningRef.current = false
       setStreaming('')
       setRunning(false)
       await fetch(`/api/sessions/${session.id}`, {
@@ -291,6 +309,7 @@ function AgentTerminal({ session, jobName, onBack }: {
 
   function stopJob() {
     abortRef.current?.abort()
+    runningRef.current = false
     setRunning(false)
     setStreaming('')
   }
@@ -364,12 +383,27 @@ function AgentTerminal({ session, jobName, onBack }: {
                 border: m.role === 'agent' ? '1px solid #333' : 'none',
               }}>
                 {m.role === 'agent'
-                  ? <ReactMarkdown components={mdComponents} rehypePlugins={[rehypeRaw]}>{nl2md(m.content)}</ReactMarkdown>
+                  ? <ReactMarkdown components={mdComponents} remarkPlugins={[remarkGfm, remarkBreaks]}>{m.content}</ReactMarkdown>
                   : m.content
                 }
               </div>
             </div>
           ))}
+          {running && !streaming && (
+            <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+              <div style={{
+                padding: '10px 14px',
+                borderRadius: '16px 16px 16px 4px',
+                background: '#1a1a1a', color: 'var(--text-muted)',
+                fontSize: 13, lineHeight: 1.6,
+                border: '1px solid #333',
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}>
+                ⏳ กำลังทำงาน...
+                <span className="animate-pulse-glow" style={{ color: 'var(--success)' }}>▋</span>
+              </div>
+            </div>
+          )}
           {streaming && (
             <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
               <div style={{
@@ -379,8 +413,8 @@ function AgentTerminal({ session, jobName, onBack }: {
                 fontSize: 13, lineHeight: 1.6,
                 border: '1px solid #333',
               }}>
-                <ReactMarkdown components={mdComponents} rehypePlugins={[rehypeRaw]}>{nl2md(streaming)}</ReactMarkdown>
-                <span className="animate-pulse-glow" style={{ color: 'var(--success)' }}>▋</span>
+                <ReactMarkdown components={mdComponents} remarkPlugins={[remarkGfm, remarkBreaks]}>{streaming}</ReactMarkdown>
+                {running && <span className="animate-pulse-glow" style={{ color: 'var(--success)' }}>▋</span>}
               </div>
             </div>
           )}
@@ -417,13 +451,15 @@ function AgentTerminal({ session, jobName, onBack }: {
 function RunPageContent() {
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [selectedJob, setSelectedJob] = useState('')
+  const [selectedJobSlug, setSelectedJobSlug] = useState('')
   const [activeSession, setActiveSession] = useState<Session | null>(null)
 
   const { data: jobsData } = useSWR('/api/jobs?all=0', fetcher)
   const jobs: JobWorkspace[] = jobsData?.jobs || []
 
-  function selectJob(name: string) {
+  function selectJob(name: string, slug: string) {
     setSelectedJob(name)
+    setSelectedJobSlug(slug)
     setStep(2)
     setActiveSession(null)
   }
@@ -435,6 +471,7 @@ function RunPageContent() {
 
   function handleResume(session: Session) {
     setSelectedJob(session.jobName)
+    setSelectedJobSlug(session.jobSlug || session.jobName)
     setActiveSession(session)
     setStep(3)
   }
@@ -448,15 +485,20 @@ function RunPageContent() {
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ fontSize: 22, fontWeight: 700 }}>Run Job</div>
 
-      <ActiveSessionsTable onResume={handleResume} />
+      <ActiveSessionsTable
+        onResume={handleResume}
+        onDelete={(id) => {
+          if (activeSession?.id === id) backToWizard()
+        }}
+      />
 
       {step === 3 && activeSession ? (
         <AgentTerminal session={activeSession} jobName={selectedJob} onBack={backToWizard} />
       ) : (
         <>
-          <JobSelector jobs={jobs} selected={selectedJob} onSelect={selectJob} />
+          <JobSelector jobs={jobs} selected={selectedJobSlug} onSelect={selectJob} />
           {step === 2 && selectedJob && (
-            <SessionPicker jobName={selectedJob} onStart={handleStart} />
+            <SessionPicker jobName={selectedJob} jobSlug={selectedJobSlug} onStart={handleStart} />
           )}
         </>
       )}

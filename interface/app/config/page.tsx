@@ -16,7 +16,6 @@ export default function ConfigPage() {
     gatewayUrl: '',
     apiKey: '',
     agentId: '',
-    bscscanApiKey: '',
     workspacePath: '',
     maxConcurrent: 20,
     autoRun: false,
@@ -112,20 +111,6 @@ export default function ConfigPage() {
               </div>
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Analytics */}
-      <div className="card">
-        <div style={{ fontWeight: 600, marginBottom: 16 }}>Analytics</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <label>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>BSCScan API Key</div>
-            <input className="input" type="password" value={config.bscscanApiKey} onChange={e => setField('bscscanApiKey', e.target.value)} placeholder="••••••••" />
-          </label>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            Used for wallet balance, transaction history, and earnings charts on the dashboard.
-          </div>
         </div>
       </div>
 

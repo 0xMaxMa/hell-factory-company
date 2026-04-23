@@ -8,10 +8,10 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { jobName } = body
+  const { jobName, jobSlug } = body
   if (!jobName || typeof jobName !== 'string') {
     return NextResponse.json({ error: 'jobName is required' }, { status: 400 })
   }
-  const session = createSession(jobName)
+  const session = createSession(jobName, jobSlug || jobName)
   return NextResponse.json({ session }, { status: 201 })
 }

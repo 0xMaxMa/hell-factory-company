@@ -1,131 +1,149 @@
-# RUNBOOK — teach-eng
+# RUNBOOK — teach-eng (English Teaching Bot)
 
-## Prerequisites
+## Architecture
 
-- Python 3.8+
-- `pip install -r requirements.txt` or run `scripts/setup.sh`
-- Copy `config/.env.example` to `config/.env` and fill values
-
-## Step-by-Step Execution
-
-### Step 1: Setup
-
-```bash
-bash scripts/setup.sh
 ```
-
-Expected output:
+[Telegram Student] ↔ [bot.py] ↔ [Hell-Factory API /api/v1/chat] ↔ [Claude Session (job-run skill)]
 ```
-[OK] Python 3.x found
-[OK] Dependencies installed
-[OK] .env validated
-Setup complete!
-```
-
-### Step 2: Browse Available Platforms
-
-```bash
-python scripts/main.py --mode platforms
-```
-
-Expected output: Table of platforms with rates, requirements, links
-
-### Step 3: Generate a Lesson Plan
-
-```bash
-python scripts/main.py --mode lesson --age kids --level beginner --topic animals --duration 60
-```
-
-Arguments:
-- `--age`: `kids` (5–12) or `adults`
-- `--level`: `beginner`, `intermediate`, `advanced`
-- `--topic`: any topic string (animals, food, jobs, travel, etc.)
-- `--duration`: 25, 50, or 60 minutes
-
-Expected output: Full lesson plan saved to `logs/lesson_<timestamp>.md`
-
-### Step 4: Generate Activity Ideas
-
-```bash
-python scripts/main.py --mode activities --format qa --age kids --count 10
-```
-
-Arguments:
-- `--format`: `qa`, `matching`, `roleplay`, `fillblank`, `storytelling`
-- `--count`: number of activity items to generate
-
-### Step 5: Dry Run (demo all modes)
-
-```bash
-python scripts/main.py --dry-run
-```
-
-Runs all modes with sample data, no API calls needed.
 
 ---
 
-## Telegram Bot (Interactive Teaching)
+## Execution Steps (ทำตามลำดับ)
 
-### Bot Setup
-
-1. Create a bot via [@BotFather](https://t.me/BotFather) on Telegram → get `BOT_TOKEN`
-2. Copy `config/.env.example` → `config/.env` and set `TELEGRAM_BOT_TOKEN=<your_token>`
-
-### Bot Dry Run (no token needed)
+### Step 1: Kill bot เดิม (ถ้ามี)
 
 ```bash
-python3 scripts/bot.py --dry-run
+BOT_PIDS=$(pgrep -f "python3.*bot.py" 2>/dev/null)
+if [ -n "$BOT_PIDS" ]; then
+  echo "$BOT_PIDS" | xargs kill -9 2>/dev/null
+  echo "Killed old bot (PIDs: $BOT_PIDS)"
+  sleep 1
+else
+  echo "No old bot running"
+fi
 ```
 
-Simulates a full lesson session in terminal.
+### Step 2: ใช้ Session ID จาก channel + เขียน session.json
 
-### Start the Bot
+**IMPORTANT**: SESSION_ID ต้องมาจาก API channel header (`session_id` field) ห้ามสร้างใหม่ด้วย `date`
 
 ```bash
-python3 scripts/bot.py
+# SESSION_ID ต้องถูกส่งมาจาก job-run caller (channel session_id)
+# ตัวอย่าง: SESSION_ID="job-teach-eng-1776914045551"
+SESSION_FILE="/home/dev/projects/hell-factory-company/job_workspaces/teach-eng/data/session.json"
+python3 -c "
+import json, sys, datetime
+data = {'session_id': sys.argv[1], 'started_at': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}
+json.dump(data, open(sys.argv[2], 'w'))
+print('Written:', data)
+" "$SESSION_ID" "$SESSION_FILE"
+# ตรวจสอบว่า session.json ถูกเขียนและ session_id ถูกต้อง
+WRITTEN_ID=$(python3 -c "import json; print(json.load(open('$SESSION_FILE'))['session_id'])")
+if [ "$WRITTEN_ID" != "$SESSION_ID" ]; then
+  echo "ERROR: session.json mismatch! written=$WRITTEN_ID expected=$SESSION_ID"
+  exit 1
+fi
+echo "✓ session.json verified: $SESSION_ID"
 ```
 
-### Student Flow
+### Step 3: ติดตั้ง dependencies (ถ้ายังไม่ได้ติดตั้ง)
 
-```
-Student: /start
-Bot:     Hello! Who am I teaching? [Kids] [Adults]
-Student: [Kids]
-Bot:     What level? [Beginner] [Intermediate] [Advanced]
-Student: [Beginner]
-Bot:     Choose topic: [Animals] [Food] [Colors] ...
-Student: [Animals]
-Bot:     Question 1/8 — What is this? 🐶  [dog] [cat] [fish] [bird]
-Student: [dog]
-Bot:     Great job! 🌟
-Bot:     Question 2/8 — ...
-...
-Bot:     🎊 Lesson complete! Score: 7/8 (87%) ⭐⭐⭐ Outstanding!
+```bash
+bash /home/dev/projects/hell-factory-company/job_workspaces/teach-eng/scripts/setup.sh
 ```
 
-Commands:
-- `/start` — begin a new lesson
-- `/stop`  — end lesson at any time
+### Step 4: รัน bot.py ใน background
+
+```bash
+TELEGRAM_BOT_TOKEN="8612385914:AAH_HVfo0v1O4KrymjCPt02sm1vEhYuGG5I" \
+HELL_FACTORY_URL="http://localhost:4200" \
+HELL_FACTORY_API_KEY="hell-factory-api-key" \
+JOB_SESSION_ID="$SESSION_ID" \
+nohup python3 /home/dev/projects/hell-factory-company/job_workspaces/teach-eng/scripts/bot.py \
+  > /home/dev/projects/hell-factory-company/job_workspaces/teach-eng/logs/bot.log 2>&1 &
+echo "Bot PID: $!"
+```
+
+### Step 5: ตรวจสอบว่า bot ทำงานแล้ว
+
+```bash
+sleep 3
+tail -5 /home/dev/projects/hell-factory-company/job_workspaces/teach-eng/logs/bot.log
+```
+
+ถ้าเห็น `Starting bot | session=...` → สำเร็จ
+
+### Step 6: รายงานผล
+
+แจ้งคุณลูกค้าว่า:
+- Bot online แล้วที่ @eng_by_indian_programmer_bot
+- Session ID: `$SESSION_ID`
+- นักเรียนพิมพ์ **/start** เพื่อเริ่มใช้บริการได้เลย
+
+---
+
+## Flow ที่นักเรียนเห็น
+
+1. นักเรียนพิมพ์ `/start` ใน Telegram
+2. bot.py ส่ง `/start` ให้ agent → agent ตรวจ payment
+3. ถ้าฟรี ($0): agent ตอบ `payment_ok` → bot.py เริ่มสอนทันที
+4. ถ้ามีค่าใช้จ่าย: agent แจ้งค่าบริการและ wallet address → นักเรียนส่ง tx hash → bot.py ส่งให้ agent verify → ถ้าผ่านเริ่มสอน
+5. สอนคำศัพท์ 10 ข้อ พร้อม inline keyboard 4 ตัวเลือก
+6. จบ session → bot.py ส่ง `/end` ให้ agent reset
+
+---
+
+## Claude Session — Response Format (สำคัญมาก)
+
+เมื่อ bot.py ส่งข้อความมา ต้องตอบเป็น **JSON เสมอ** ห้ามตอบข้อความธรรมดา
+
+### Payment phase
+```json
+{"type": "payment_ok", "text": "บริการนี้ไม่มีค่าใช้จ่ายครับ ยินดีต้อนรับ! 🎉"}
+{"type": "payment_request", "text": "ค่าบริการคือ $5 ครับ กรุณาชำระที่ `0x...`"}
+{"type": "payment_failed", "text": "ยืนยันไม่ผ่านครับ [reason]"}
+```
+
+### Lesson phase
+```json
+{ "type": "text", "text": "สวัสดีนักเรียนครับ! ..." }
+{
+  "type": "question",
+  "text": "📖 ข้อที่ 3/10\n\n*apple* แปลว่าอะไรครับ?",
+  "choices": ["แอปเปิ้ล", "ส้ม", "กล้วย", "มะม่วง"]
+}
+{ "type": "summary", "text": "🎉 จบแล้วครับ! คะแนน: 8/10\n..." }
+```
+
+---
+
+## Teaching Flow ที่ Claude Session ต้องทำ
+
+**เมื่อรับ TEACHER_CONTEXT แล้ว "เริ่มโจทย์ข้อที่ 1":**
+1. ทักทายนักเรียน (type: text)
+2. ส่งโจทย์ข้อที่ 1 ทันที (type: question, 4 choices)
+
+**เมื่อรับ `answer:xxx`:**
+1. ตรวจว่าถูกหรือผิด → เฉลย (type: text)
+2. ถ้ายังไม่ครบ 10 ข้อ → ส่งโจทย์ถัดไป (type: question)
+3. ครบ 10 ข้อ → สรุปคะแนน (type: summary)
+
+**เลือกคำศัพท์ 10 คำแบบ random** จากคลังคำศัพท์ภาษาอังกฤษ-ไทย
+**choices ต้องมี 4 ตัวเลือกเสมอ** (1 ถูก + 3 ผิด random จากคำอื่น)
+
+---
+
+## Stop Bot
+
+```bash
+pkill -f "bot.py" && echo "Bot stopped"
+```
 
 ## Error Handling
 
-| Error | Cause | Action |
-|-------|-------|--------|
-| `ModuleNotFoundError` | Missing packages | Run `bash scripts/setup.sh` again |
-| `Invalid age group` | Wrong --age value | Use `kids` or `adults` only |
-| `Invalid level` | Wrong --level | Use `beginner`, `intermediate`, or `advanced` |
-| `Duration must be 25, 50, or 60` | Wrong duration | Use one of the accepted values |
-| Bot not responding | No token set | Set `TELEGRAM_BOT_TOKEN` in `config/.env` |
-| `Conflict: terminated` | Bot running twice | Kill other instance, restart |
-
-## Budget Limits
-
-- No API costs — lesson generation is local/template-based
-- Optional: OpenAI API for AI-generated content (set `OPENAI_API_KEY` in `.env`)
-
-## Success Criteria
-
-- `setup.sh` exits 0
-- `--dry-run` completes without crash
-- Lesson plan file appears in `logs/`
-- Platform table prints correctly
+| Error | Action |
+|---|---|
+| Bot ไม่ start | ดู logs/bot.log หา error |
+| `HELL_FACTORY_API_KEY` ผิด | ตรวจ config.json ใน interface |
+| Gateway timeout | ตอบ type:text "ระบบช้าหน่อย ลองอีกครั้ง" |
+| Bot conflict | มี instance อื่นรันอยู่ → `pkill -f bot.py` ก่อน |

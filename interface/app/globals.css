@@ -119,3 +119,13 @@ body {
 .badge-gray { background: rgba(170,170,170,0.1); color: var(--text-muted); }
 .badge-blue { background: rgba(0,102,255,0.1); color: var(--accent-alt); }
 .badge-red { background: rgba(255,51,102,0.1); color: var(--error); }
+
+.recharts-wrapper, .recharts-wrapper svg, .recharts-wrapper:focus, .recharts-wrapper svg:focus {
+  outline: none !important;
+}
+
+svg, svg:focus, svg *,
+.recharts-surface, .recharts-surface:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}

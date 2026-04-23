@@ -21,6 +21,8 @@
     "react-markdown": "^10.1.0",
     "recharts": "^3.8.1",
     "rehype-raw": "^7.0.0",
+    "remark-breaks": "^4.0.0",
+    "remark-gfm": "^4.0.1",
     "swr": "^2.4.1"
   },
   "devDependencies": {

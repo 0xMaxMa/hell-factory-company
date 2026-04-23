@@ -1,0 +1,11 @@
+{
+  "id": "lending-venus",
+  "name": "👑 Venus Lending",
+  "description": "Deposit/Withdraw tokens on Venus Protocol (BNB Chain) via Foundry cast",
+  "version": "2.0.0",
+  "stack": "foundry",
+  "initial_capital": "$0",
+  "network": "bsc-mainnet",
+  "rpc_url": "https://bsc-dataseed1.binance.org",
+  "status": "ready"
+}

@@ -47,3 +47,4 @@ interface/sessions.json
 interface/wallet_history.json
 interface/playwright-report/
 interface/test-results/
+session.json

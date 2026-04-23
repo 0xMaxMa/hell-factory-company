@@ -11,6 +11,8 @@ help:
 	@echo "  help         Show this help message"
 
 start:
+	@python3 killport.py $(PORT) 2>/dev/null || true
+	@sleep 0.5
 	npx next dev --port $(PORT)
 
 forward-port:

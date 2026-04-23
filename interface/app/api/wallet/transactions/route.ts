@@ -3,23 +3,14 @@ import { getTransactions } from '@/lib/bscscan'
 import { attributeJob } from '@/lib/txAttribution'
 import { getWorkspacePath } from '@/lib/jobs'
 import { getWalletAddressFromScript } from '@/lib/walletScript'
-import fs from 'fs'
-import path from 'path'
-
-function readConfig() {
-  try { return JSON.parse(fs.readFileSync(path.join(process.cwd(), 'config.json'), 'utf-8')) } catch { return {} }
-}
-
 export async function GET() {
-  const cfg = readConfig()
-  const apiKey = cfg.bscscanApiKey || ''
   const address = getWalletAddressFromScript()
 
-  if (!address || !apiKey) {
-    return NextResponse.json({ transactions: [], error: 'Wallet or BSCScan API key not configured' })
+  if (!address) {
+    return NextResponse.json({ transactions: [], error: 'Wallet not configured' })
   }
 
-  const raw = await getTransactions(address, apiKey)
+  const raw = await getTransactions(address)
   const workspacePath = getWorkspacePath()
 
   const transactions = raw.map((tx: { hash: string; from: string; value: string; timeStamp: string }) => ({

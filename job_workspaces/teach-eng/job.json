@@ -1,20 +1,25 @@
 {
-  "name": "teach-eng",
-  "description": "Online English teaching toolkit — lesson planner, activity generator, and platform guide for teaching kids and adults via Cambly, iTalki, Preply, VIPKid, etc.",
+  "name": "🇬🇧 Teach English",
+  "description": "Telegram bot สอนภาษาอังกฤษ — จับคู่คำศัพท์ 10 ข้อต่อ session มี inline keyboard 4 ตัวเลือก สรุปคะแนนปลาย session",
   "category": "education",
   "status": "ready",
-  "created_at": "2026-04-17T10:03:00Z",
-  "updated_at": "2026-04-17T10:25:00Z",
-  "estimated_earnings": "$1,000–$10,000+/month (20–40 hrs/week)",
+  "created_at": "2026-04-22T19:44:00Z",
+  "updated_at": "2026-04-22T19:44:00Z",
+  "estimated_earnings": "TBD",
   "risk_level": "low",
   "requires": {
     "wallet": false,
-    "initial_capital": "$0",
-    "apis": ["Telegram Bot API"],
-    "packages": ["tabulate", "python-dotenv", "python-telegram-bot"]
+    "initial_capital": "$5",
+    "apis": ["telegram-bot-api"],
+    "packages": ["python-telegram-bot>=20.0"]
   },
-  "tags": ["education", "english", "teaching", "online", "freelance", "kids", "adults"],
+  "bot": {
+    "token": "8612385914:AAH_HVfo0v1O4KrymjCPt02sm1vEhYuGG5I",
+    "username": "eng_by_indian_programmer_bot",
+    "url": "https://t.me/eng_by_indian_programmer_bot"
+  },
+  "tags": ["telegram", "education", "english", "vocabulary", "bot"],
   "run_count": 1,
   "total_earnings": "0",
-  "last_run": "2026-04-21T07:29:00Z"
+  "last_run": "2026-04-22T20:51:39Z"
 }

@@ -2,8 +2,8 @@
 import useSWR from 'swr'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
-import TransactionList from '@/components/TransactionList'
-import { JobWorkspace, Transaction } from '@/lib/types'
+import PaymentList from '@/components/PaymentList'
+import { JobWorkspace, Payment } from '@/lib/types'
 
 const WalletHistoryChart = dynamic(() => import('@/components/charts/WalletHistoryChart'), { ssr: false })
 const JobRunsChart = dynamic(() => import('@/components/charts/JobRunsChart'), { ssr: false })
@@ -24,6 +24,7 @@ function categoryBadge(cat: string) {
 function earningsDisplay(job: JobWorkspace): string {
   if (typeof job.estimated_earnings === 'string') return job.estimated_earnings
   const e = job.estimated_earnings as Record<string, unknown>
+  if (!e) return 'N/A'
   if (e.per_project_min !== undefined) return `$${e.per_project_min}–$${e.per_project_max}/project`
   if (e.typical_apy_range_usdt) return String(e.typical_apy_range_usdt) + ' APY'
   return 'N/A'
@@ -33,13 +34,17 @@ export default function Dashboard() {
   const { data: jobsData } = useSWR('/api/jobs?all=0', fetcher, { refreshInterval: 10000 })
   const { data: walletData } = useSWR('/api/wallet', fetcher, { refreshInterval: 60000 })
   const { data: historyData } = useSWR('/api/wallet/history', fetcher, { refreshInterval: 60000 })
-  const { data: txData } = useSWR('/api/wallet/transactions', fetcher, { refreshInterval: 120000 })
+  const { data: paymentsData } = useSWR('/api/payments', fetcher, { refreshInterval: 30000 })
   const { data: sessionsData } = useSWR('/api/sessions', fetcher, { refreshInterval: 5000 })
 
   const jobs: JobWorkspace[] = jobsData?.jobs || []
   const wallet = walletData
-  const walletHistory = historyData?.history || []
-  const transactions: Transaction[] = txData?.transactions || []
+  const today = new Date().toISOString().slice(0, 10)
+  const baseHistory: Array<{ date: string; total_usd: number }> = historyData?.history || []
+  const walletHistory = wallet?.total_usd
+    ? [...baseHistory.filter((e: { date: string }) => e.date !== today), { date: today, total_usd: parseFloat(wallet.total_usd) }]
+    : baseHistory
+  const payments: Payment[] = paymentsData?.payments || []
   const sessions = sessionsData?.sessions || []
   const activeSessions = sessions.filter((s: { status: string }) => s.status === 'active')
 
@@ -62,9 +67,28 @@ export default function Dashboard() {
               <div style={{ fontSize: 28, fontWeight: 700, fontFamily: 'JetBrains Mono, monospace' }}>
                 ${wallet?.total_usd || '—'}
               </div>
-              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
-                BNB: {wallet?.bnb || '—'} (${wallet?.bnb_usd || '—'})
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', marginTop: 6 }}>
+                {(wallet?.tokens || []).filter((t: { balance: string }) => parseFloat(t.balance) > 0).map((t: { symbol: string; balance: string; usd: string }) => (
+                  <span key={t.symbol} style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    {t.symbol}: <span style={{ color: 'var(--text)' }}>${t.usd}</span>
+                  </span>
+                ))}
               </div>
+              {(wallet?.venus || []).length > 0 && (
+                <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4, letterSpacing: '0.06em' }}>
+                    🏦 Venus Protocol
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px' }}>
+                    {(wallet.venus as Array<{ symbol: string; underlyingSymbol: string; underlyingAmount: string; usd: string }>).map(v => (
+                      <span key={v.symbol} style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                        {v.underlyingSymbol}: <span style={{ color: '#4ade80' }}>{v.underlyingAmount}</span>
+                        <span style={{ color: 'var(--text-muted)' }}> (${v.usd})</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -92,6 +116,57 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Token Holdings */}
+      {wallet && !wallet.error && (
+        <div className="card">
+          <div style={{ fontWeight: 600, marginBottom: 16 }}>🪙 Token Holdings</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {/* Header */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, padding: '4px 8px', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', borderBottom: '1px solid var(--border)', marginBottom: 4 }}>
+              <span>Token</span>
+              <span style={{ textAlign: 'right' }}>Balance</span>
+              <span style={{ textAlign: 'right' }}>Price</span>
+              <span style={{ textAlign: 'right' }}>Value</span>
+            </div>
+            {/* Wallet tokens */}
+            {(wallet.tokens as Array<{ symbol: string; balance: string; price: number; usd: string }>)
+              .filter(t => parseFloat(t.balance) > 0)
+              .map(t => (
+                <div key={t.symbol} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, padding: '6px 8px', fontSize: 13, borderRadius: 4 }}>
+                  <span style={{ fontWeight: 600 }}>{t.symbol}</span>
+                  <span style={{ textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'var(--text-muted)' }}>{parseFloat(t.balance).toFixed(4)}</span>
+                  <span style={{ textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'var(--text-muted)' }}>${t.price >= 1 ? t.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : t.price.toFixed(4)}</span>
+                  <span style={{ textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', fontWeight: 600 }}>${t.usd}</span>
+                </div>
+              ))
+            }
+            {/* Venus deposits */}
+            {(wallet.venus as Array<{ symbol: string; underlyingSymbol: string; underlyingAmount: string; price: number; usd: string }>).length > 0 && (
+              <>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', padding: '8px 8px 4px', borderTop: '1px solid var(--border)', marginTop: 4 }}>
+                  🏦 Venus Protocol
+                </div>
+                {(wallet.venus as Array<{ symbol: string; underlyingSymbol: string; underlyingAmount: string; price: number; usd: string }>).map(v => (
+                  <div key={v.symbol} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, padding: '6px 8px', fontSize: 13, borderRadius: 4 }}>
+                    <span style={{ fontWeight: 600 }}>{v.underlyingSymbol} <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 400 }}>(v)</span></span>
+                    <span style={{ textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'var(--text-muted)' }}>{parseFloat(v.underlyingAmount).toFixed(4)}</span>
+                    <span style={{ textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'var(--text-muted)' }}>${v.price >= 1 ? v.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : v.price.toFixed(4)}</span>
+                    <span style={{ textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, color: '#4ade80' }}>${v.usd}</span>
+                  </div>
+                ))}
+              </>
+            )}
+            {/* Total */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, padding: '8px 8px 4px', borderTop: '1px solid var(--border)', marginTop: 4 }}>
+              <span style={{ fontWeight: 600, fontSize: 13 }}>Total</span>
+              <span />
+              <span />
+              <span style={{ textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: 14 }}>${wallet.total_usd}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Active sessions */}
       {activeSessions.length > 0 && (
@@ -125,22 +200,18 @@ export default function Dashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <div className="card">
           <div style={{ fontWeight: 600, marginBottom: 12 }}>🔁 Job Runs</div>
-          <JobRunsChart jobs={jobs} />
+          <JobRunsChart jobs={jobs} payments={payments} />
         </div>
         <div className="card">
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>💵 Earnings per Job (BNB)</div>
-          <JobEarningsChart jobs={jobs} bnbPrice={wallet?.bnb_price ? parseFloat(wallet.bnb_price) : undefined} />
+          <div style={{ fontWeight: 600, marginBottom: 12 }}>💵 Earnings per Job</div>
+          <JobEarningsChart payments={payments} />
         </div>
       </div>
 
-      {/* Transaction list */}
+      {/* Payment list */}
       <div className="card">
-        <div style={{ fontWeight: 600, marginBottom: 16 }}>💳 Recent Incoming Transactions</div>
-        <TransactionList
-          txs={transactions}
-          loading={!txData && !txData?.error}
-          error={txData?.error}
-        />
+        <div style={{ fontWeight: 600, marginBottom: 16 }}>💳 Recent Incoming Payments</div>
+        <PaymentList payments={payments} loading={!paymentsData} />
       </div>
 
       {/* Job list */}
