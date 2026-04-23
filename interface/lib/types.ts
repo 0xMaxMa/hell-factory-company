@@ -1,5 +1,6 @@
 export interface JobWorkspace {
   name: string
+  slug: string
   job_id?: string
   title?: string
   description: string
@@ -28,11 +29,16 @@ export interface GatewayStatus {
   }>
 }
 
+export interface TokenBalance {
+  symbol: string
+  balance: string
+  price: number
+  usd: string
+}
+
 export interface WalletBalance {
   address: string
-  bnb: string
-  bnb_usd: string
-  tokens: Array<{ symbol: string; balance: string; usd: string }>
+  tokens: TokenBalance[]
   total_usd: string
   error?: string
 }
@@ -41,9 +47,21 @@ export interface AppConfig {
   gatewayUrl: string
   apiKey: string
   agentId: string
-  bnbAddress: string
-  bscscanApiKey: string
   workspacePath: string
   maxConcurrent: number
   autoRun: boolean
+}
+
+export interface WalletHistoryEntry {
+  date: string
+  total_usd: number
+}
+
+export interface Payment {
+  id: string
+  date: string
+  agentId: string
+  job: string
+  token: string
+  amount: string
 }

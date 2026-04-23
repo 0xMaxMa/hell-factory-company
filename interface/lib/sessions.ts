@@ -4,6 +4,7 @@ import path from 'path'
 export interface Session {
   id: string
   jobName: string
+  jobSlug: string
   status: 'active' | 'idle' | 'completed' | 'error'
   createdAt: string
   lastActivity: string
@@ -39,11 +40,12 @@ export function getSession(id: string): Session | undefined {
   return readStore().sessions.find(s => s.id === id)
 }
 
-export function createSession(jobName: string): Session {
+export function createSession(jobName: string, jobSlug: string): Session {
   const store = readStore()
   const session: Session = {
-    id: `job-${jobName}-${Date.now()}`,
+    id: `job-${jobSlug}-${Date.now()}`,
     jobName,
+    jobSlug,
     status: 'idle',
     createdAt: new Date().toISOString(),
     lastActivity: new Date().toISOString(),

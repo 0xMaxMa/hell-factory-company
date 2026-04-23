@@ -18,7 +18,7 @@ test.describe('Dashboard page', () => {
 
   test('shows wallet section', async ({ page }) => {
     await page.goto('/')
-    await expect(page.getByText(/wallet/i)).toBeVisible()
+    await expect(page.getByText('💰 Wallet')).toBeVisible()
   })
 
   test('shows active jobs section', async ({ page }) => {

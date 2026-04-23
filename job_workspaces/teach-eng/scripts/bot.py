@@ -1,418 +1,259 @@
 #!/usr/bin/env python3
-"""teach-eng Telegram Bot — pay crypto → learn English."""
+"""English teaching Telegram bot — routes messages through Hell-Factory Chat API."""
 
 import asyncio
+import os
 import json
 import logging
-import os
-import random
-import sys
+import requests
 from pathlib import Path
 
-try:
-    from dotenv import load_dotenv
-    env_path = Path(__file__).parent.parent / "config" / ".env"
-    if env_path.exists():
-        load_dotenv(env_path)
-except ImportError:
-    pass
-
-DRY_RUN = os.getenv("DRY_RUN", "false").lower() == "true" or "--dry-run" in sys.argv
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-WALLET_ADDRESS = os.getenv("WALLET_ADDRESS", "0xf0189A9b34239DC69B9294Fe681115d342962295").lower()
-LESSON_PRICE_USDT = float(os.getenv("LESSON_PRICE_USDT", "1.0"))
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    MessageHandler,
+    filters,
+    ContextTypes,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
-sys.path.insert(0, str(Path(__file__).parent))
-from main import ACTIVITY_TEMPLATES
+TELEGRAM_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+HELL_FACTORY_URL = os.environ.get("HELL_FACTORY_URL", "http://localhost:4200")
+HELL_FACTORY_API_KEY = os.environ["HELL_FACTORY_API_KEY"]
+SESSION_ID = os.environ["JOB_SESSION_ID"]
 
-# ── Conversation states ──────────────────────────────────────────────────────
-PAYING, CHOOSE_AGE, CHOOSE_LEVEL, CHOOSE_TOPIC, IN_LESSON = range(5)
+DATA_DIR = Path(__file__).parent.parent / "data"
+JOB_JSON = Path(__file__).parent.parent / "job.json"
 
-# ── Chain RPC endpoints (public, no API key needed) ──────────────────────────
-CHAINS = {
-    "ETH":     "https://cloudflare-eth.com",
-    "BSC":     "https://bsc-dataseed1.binance.org",
-    "Polygon": "https://polygon-rpc.com",
-}
+# Load job info once at startup
+_job: dict = json.loads(JOB_JSON.read_text()) if JOB_JSON.exists() else {}
+_initial_capital: str = _job.get("requires", {}).get("initial_capital", "$0")
+_job_name: str = _job.get("name", "English Teaching")
+_job_desc: str = _job.get("description", "")
 
-# ERC-20 USDT contract addresses per chain
-USDT_CONTRACTS = {
-    "ETH":     "0xdac17f958d2ee523a2206206994597c13d831ec7",
-    "BSC":     "0x55d398326f99059ff775485246999027b3197955",
-    "Polygon": "0xc2132d05d31c914a87c6611c10748aeb04b58e8f",
-}
+# One active student at a time
+active_chat_id: int | None = None
 
-# ERC-20 transfer(address,uint256) selector
-ERC20_TRANSFER_SELECTOR = "0xa9059cbb"
+# States: "waiting_payment" | "in_lesson" | None
+session_state: dict[int, str] = {}
 
-# Already-used tx hashes (prevent replay)
-used_tx_hashes: set[str] = set()
+START_TRIGGER = (
+    "/start\n"
+    "[JOB-RUN:teach-eng] Student triggered payment check. Respond with JSON only, no other text.\n"
+    "Silently read: /home/dev/projects/hell-factory-company/job_workspaces/teach-eng/job.json\n"
+    "Check initial_capital field:\n"
+    "- If '$0' → respond: {\"type\": \"payment_ok\", \"text\": \"บริการนี้ไม่มีค่าใช้จ่ายครับ ยินดีต้อนรับ! 🎉\"}\n"
+    "- If has cost (e.g. '$5') → run: python3 /home/dev/.claude-gateway/agents/indian-programmer/workspace/skills/crypto-wallet/get_address.py\n"
+    "  then respond: {\"type\": \"payment_request\", \"text\": \"ค่าบริการ [amount]\\nBNB Chain address: [address]\\nกรุณาส่ง Transaction Hash (0x...) เมื่อโอนเสร็จครับ\"}\n"
+    "Do NOT read bot.py or any other scripts. Respond with one JSON object only."
+)
 
-# ── Vocab / activity data ────────────────────────────────────────────────────
-VOCAB_BANKS = {
-    "animals":  [("dog","🐶"),("cat","🐱"),("fish","🐟"),("bird","🐦"),("rabbit","🐰"),
-                 ("lion","🦁"),("elephant","🐘"),("monkey","🐵"),("frog","🐸"),("horse","🐴")],
-    "food":     [("apple","🍎"),("banana","🍌"),("pizza","🍕"),("rice","🍚"),("egg","🥚"),
-                 ("milk","🥛"),("bread","🍞"),("cake","🎂"),("soup","🍲"),("noodle","🍜")],
-    "colors":   [("red","🔴"),("blue","🔵"),("green","🟢"),("yellow","🟡"),("pink","🩷"),
-                 ("orange","🟠"),("purple","🟣"),("white","⬜"),("black","⬛"),("brown","🟤")],
-    "numbers":  [("one","1️⃣"),("two","2️⃣"),("three","3️⃣"),("four","4️⃣"),("five","5️⃣"),
-                 ("six","6️⃣"),("seven","7️⃣"),("eight","8️⃣"),("nine","9️⃣"),("ten","🔟")],
-    "body":     [("head","👤"),("hand","🤚"),("eye","👁"),("mouth","👄"),("ear","👂"),
-                 ("nose","👃"),("leg","🦵"),("arm","💪"),("back","🫀"),("foot","🦶")],
-    "default":  [("happy","😊"),("sad","😢"),("big","🔺"),("small","🔻"),("fast","⚡"),
-                 ("slow","🐌"),("hot","🔥"),("cold","❄️"),("new","✨"),("old","📜")],
-}
-
-ENCOURAGEMENTS = ["Great job! 🌟", "Excellent! 🎉", "Well done! 👏", "Perfect! ✅", "Amazing! 🚀", "Super! ⭐"]
-WRONG_REPLIES  = ["Not quite!", "Oops!", "Almost!", "Good try!"]
-
-sessions: dict[int, dict] = {}
+TEACHER_CONTEXT = (
+    "[TEACH-ENG BOT INIT]\n"
+    "คุณคือครูสอนภาษาอังกฤษผ่าน Telegram ชื่อ @eng_by_indian_programmer_bot\n"
+    "นักเรียนคนหนึ่งเพิ่งชำระเงินและพร้อมเรียนแล้ว กรุณาตอบเป็น JSON เสมอในรูปแบบต่อไปนี้:\n\n"
+    "ข้อความทั่วไป: {\"type\": \"text\", \"text\": \"...\"}\n"
+    "โจทย์คำศัพท์: {\"type\": \"question\", \"text\": \"...\", \"choices\": [\"A\", \"B\", \"C\", \"D\"]}\n"
+    "จบ session: {\"type\": \"summary\", \"text\": \"...\"}\n\n"
+    "กฎ:\n"
+    "- สอนคำศัพท์ 10 คำต่อ session\n"
+    "- แต่ละข้อมี 4 ตัวเลือก (1 ถูก + 3 ผิด)\n"
+    "- เฉลยทุกครั้งหลังนักเรียนตอบ\n"
+    "- สรุปคะแนนเมื่อครบ 10 ข้อ\n\n"
+    "ตอบเป็น JSON เท่านั้น ห้ามรวมหลาย JSON ในข้อความเดียว ตอบทีละ 1 JSON object เท่านั้น\n\n"
+    "ทักทายนักเรียนสั้นๆ แล้วส่งโจทย์ข้อที่ 1 เป็น JSON ได้เลยครับ"
+)
 
 
-# ── Blockchain verification ──────────────────────────────────────────────────
+def send_to_agent(message: str) -> list[dict]:
+    """Send message to Hell-Factory chat API, return list of parsed JSON payloads."""
+    resp = requests.post(
+        f"{HELL_FACTORY_URL}/api/v1/chat",
+        headers={"X-Api-Key": HELL_FACTORY_API_KEY, "Content-Type": "application/json"},
+        json={"session_id": SESSION_ID, "message": message},
+        timeout=90,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    raw = data.get("response", "")
 
-async def _rpc_call(url: str, method: str, params: list) -> dict | None:
+    # Strip code block wrapper if present
+    clean = raw.strip()
+    if clean.startswith("```"):
+        clean = clean.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+
+    # Try single JSON first
     try:
-        import urllib.request
-        payload = json.dumps({"jsonrpc": "2.0", "method": method, "params": params, "id": 1}).encode()
-        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
-        with urllib.request.urlopen(req, timeout=8) as resp:
-            return json.loads(resp.read())
-    except Exception as e:
-        logger.debug("RPC %s failed: %s", url, e)
-        return None
+        return [json.loads(clean)]
+    except Exception:
+        pass
 
-
-def _parse_usdt_transfer(input_data: str, to_wallet: str) -> float:
-    """Return USDT amount if input is a transfer() to to_wallet, else 0."""
-    data = input_data.lower().replace("0x", "")
-    if not input_data.lower().startswith(ERC20_TRANSFER_SELECTOR):
-        return 0.0
-    # transfer(address recipient, uint256 amount)
-    # recipient is bytes 4-35 (padded 32 bytes), last 20 bytes = address
-    if len(data) < 136:
-        return 0.0
-    recipient = "0x" + data[32:72]  # last 20 bytes of first 32-byte slot (offset 4 bytes selector)
-    # correct offset: selector(4 bytes) + recipient(32 bytes) + amount(32 bytes)
-    recipient_hex = data[8:72]  # 32 bytes after selector
-    recipient_addr = "0x" + recipient_hex[-40:]
-    if recipient_addr != to_wallet.lower():
-        return 0.0
-    amount_hex = data[72:136]
-    raw_amount = int(amount_hex, 16)
-    return raw_amount / 1e6  # USDT has 6 decimals
-
-
-async def verify_tx(tx_hash: str) -> tuple[bool, str]:
-    """
-    Check tx_hash on ETH/BSC/Polygon.
-    Returns (ok, message).
-    Accepts: native coin transfer to WALLET_ADDRESS (any amount > 0)
-             OR ERC-20 USDT transfer to WALLET_ADDRESS >= LESSON_PRICE_USDT
-    """
-    tx_hash = tx_hash.strip().lower()
-    if not tx_hash.startswith("0x") or len(tx_hash) != 66:
-        return False, "Invalid tx hash format. Must be 0x + 64 hex characters."
-
-    if tx_hash in used_tx_hashes:
-        return False, "This transaction has already been used."
-
-    for chain, rpc_url in CHAINS.items():
-        result = await _rpc_call(rpc_url, "eth_getTransactionByHash", [tx_hash])
-        if not result or "result" not in result or not result["result"]:
+    # Try line-by-line (agent returned multiple JSON objects)
+    payloads = []
+    for line in clean.split("\n"):
+        line = line.strip()
+        if not line or line.startswith("```"):
             continue
-        tx = result["result"]
+        try:
+            payloads.append(json.loads(line))
+        except Exception:
+            pass
 
-        # Check tx is confirmed (has block)
-        if not tx.get("blockNumber"):
-            return False, f"Transaction found on {chain} but not yet confirmed. Please wait a moment and try again."
-
-        to_addr = (tx.get("to") or "").lower()
-        value = int(tx.get("value", "0x0"), 16)
-
-        # Native coin transfer directly to our wallet
-        if to_addr == WALLET_ADDRESS and value > 0:
-            used_tx_hashes.add(tx_hash)
-            coin = {"ETH": "ETH", "BSC": "BNB", "Polygon": "MATIC"}[chain]
-            amount = value / 1e18
-            return True, f"✅ Payment confirmed on {chain}! Received {amount:.6f} {coin}"
-
-        # ERC-20 USDT transfer
-        usdt_contract = USDT_CONTRACTS.get(chain, "")
-        if to_addr == usdt_contract:
-            usdt_amount = _parse_usdt_transfer(tx.get("input", ""), WALLET_ADDRESS)
-            if usdt_amount >= LESSON_PRICE_USDT:
-                used_tx_hashes.add(tx_hash)
-                return True, f"✅ Payment confirmed on {chain}! Received {usdt_amount:.2f} USDT"
-            elif usdt_amount > 0:
-                return False, f"Payment too low: {usdt_amount:.2f} USDT received, {LESSON_PRICE_USDT} USDT required."
-
-    return False, "Transaction not found or not valid. Make sure:\n• Correct tx hash\n• Sent to the right wallet\n• Network: ETH / BSC / Polygon"
+    return payloads if payloads else [{"type": "text", "text": raw}]
 
 
-# ── Lesson helpers ───────────────────────────────────────────────────────────
+async def send_with_typing(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, message: str) -> list[dict]:
+    """Send message to agent with typing indicator while waiting."""
+    async def typing_loop():
+        try:
+            while True:
+                await ctx.bot.send_chat_action(chat_id, "typing")
+                await asyncio.sleep(4)
+        except asyncio.CancelledError:
+            pass
 
-def get_vocab(topic: str, count: int = 6) -> list:
-    bank = VOCAB_BANKS.get(topic.lower(), VOCAB_BANKS["default"])
-    return random.sample(bank, min(count, len(bank)))
-
-
-def _make_choices(correct: str, vocab: list) -> list[str]:
-    others = [w for w, _ in vocab if w != correct]
-    wrongs = random.sample(others, min(3, len(others)))
-    choices = [correct] + wrongs
-    random.shuffle(choices)
-    return choices
-
-
-def build_lesson_questions(age: str, level: str, topic: str) -> list[dict]:
-    vocab = get_vocab(topic)
-    questions = []
-    for word, emoji in vocab[:3]:
-        questions.append({"type": "qa",    "prompt": f"What is this? {emoji}", "answer": word, "choices": _make_choices(word, vocab)})
-    for word, emoji in vocab[3:6]:
-        questions.append({"type": "match", "prompt": f"Match the emoji:\n{emoji}", "answer": word, "choices": _make_choices(word, vocab)})
-    if age == "adults" or level in ("intermediate", "advanced"):
-        templates = ACTIVITY_TEMPLATES.get("fillblank", {}).get(age, [])
-        for t in random.sample(templates, min(2, len(templates))):
-            questions.append({"type": "info", "prompt": f"📝 Practice:\n{t}", "answer": None})
-    return questions
+    typing_task = asyncio.create_task(typing_loop())
+    try:
+        payloads = await asyncio.to_thread(send_to_agent, message)
+    finally:
+        typing_task.cancel()
+    return payloads
 
 
-def format_question(q: dict, idx: int, total: int) -> tuple[str, list | None]:
-    header = f"Question {idx}/{total}\n\n"
-    if q["type"] in ("qa", "match"):
-        return header + q["prompt"], q["choices"]
-    return header + q["prompt"], None
+async def deliver(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, payload: dict):
+    """Send a single agent payload to Telegram student."""
+    text = payload.get("text", "")
+    choices = payload.get("choices", [])
+
+    async def send(t: str, markup=None):
+        try:
+            await ctx.bot.send_message(chat_id, t, reply_markup=markup, parse_mode="Markdown")
+        except Exception:
+            await ctx.bot.send_message(chat_id, t, reply_markup=markup)
+
+    if choices:
+        buttons = [[InlineKeyboardButton(c, callback_data=f"ans:{c}")] for c in choices]
+        await send(text, InlineKeyboardMarkup(buttons))
+    else:
+        await send(text)
 
 
-def check_answer(session: dict, user_answer: str) -> tuple[bool, str]:
-    q = session["questions"][session["current"]]
-    if q["answer"] is None:
-        return True, random.choice(ENCOURAGEMENTS)
-    if user_answer.lower().strip() == q["answer"].lower():
-        return True, random.choice(ENCOURAGEMENTS)
-    return False, f"{random.choice(WRONG_REPLIES)} The answer is *{q['answer']}*"
+async def deliver_all(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, payloads: list[dict]):
+    """Deliver all payloads to student in order."""
+    for payload in payloads:
+        await deliver(ctx, chat_id, payload)
 
 
-# ── Telegram bot setup ───────────────────────────────────────────────────────
+async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    global active_chat_id
+    chat_id = update.effective_user.id
 
-def _setup_bot(token: str):
-    from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-    from telegram.ext import (
-        Application, CommandHandler, MessageHandler,
-        CallbackQueryHandler, ConversationHandler, filters, ContextTypes,
+    if active_chat_id and active_chat_id != chat_id:
+        await update.message.reply_text("⏳ มีนักเรียนอยู่ใน session แล้วครับ กรุณารอสักครู่...")
+        return
+
+    active_chat_id = chat_id
+    session_state[chat_id] = "waiting_payment"
+    log.info(f"New session: chat_id={chat_id}, triggering payment check")
+
+    cost_line = f"💰 ค่าบริการ: {_initial_capital} (ชำระผ่าน BNB Chain)" if _initial_capital != "$0" else "🎉 บริการนี้ไม่มีค่าใช้จ่ายครับ"
+    welcome = (
+        f"👋 ยินดีต้อนรับสู่ {_job_name}!\n\n"
+        f"📚 เราจะเรียนคำศัพท์ภาษาอังกฤษ 10 คำต่อ session\n"
+        f"   แต่ละข้อมี 4 ตัวเลือก พร้อมเฉลยทันทีหลังตอบ\n\n"
+        f"{cost_line}\n\n"
+        f"⏳ กำลังตรวจสอบข้อมูล..."
     )
+    await update.message.reply_text(welcome)
 
-    WALLET_DISPLAY = os.getenv("WALLET_ADDRESS", "0xf0189A9b34239DC69B9294Fe681115d342962295")
+    payloads = await send_with_typing(ctx, chat_id, START_TRIGGER)
+    await deliver_all(ctx, chat_id, payloads)
 
-    def payment_prompt() -> str:
-        return (
-            f"👋 Welcome! To start a lesson, please pay first.\n\n"
-            f"💰 Price: *{LESSON_PRICE_USDT} USDT* (or any ETH/BNB/MATIC)\n\n"
-            f"📬 Send to:\n`{WALLET_DISPLAY}`\n\n"
-            f"Supported networks: ETH • BSC • Polygon\n\n"
-            f"After paying, send me your *transaction hash* (0x...)\n\n"
-            f"_Type /cancel to exit_"
-        )
+    ptype = payloads[0].get("type", "text") if payloads else "text"
 
-    async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-        chat_id = update.effective_chat.id
-        sessions.pop(chat_id, None)
-        await update.message.reply_text(payment_prompt(), parse_mode="Markdown")
-        return PAYING
+    if ptype == "payment_ok":
+        await _start_lesson(ctx, chat_id)
+    else:
+        session_state[chat_id] = "waiting_payment"
 
-    async def handle_payment(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-        chat_id = update.effective_chat.id
-        tx_hash = update.message.text.strip()
-        msg = await update.message.reply_text("🔍 Verifying payment on-chain...")
-        ok, feedback = await verify_tx(tx_hash)
-        if ok:
-            await msg.edit_text(f"{feedback}\n\n🎓 Payment verified! Let's start!")
-            sessions[chat_id] = {}
-            keyboard = [[InlineKeyboardButton("👧 Kids (5–12)", callback_data="age:kids"),
-                         InlineKeyboardButton("🧑 Adults", callback_data="age:adults")]]
-            await update.message.reply_text("Who am I teaching today?", reply_markup=InlineKeyboardMarkup(keyboard))
-            return CHOOSE_AGE
+
+async def _start_lesson(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int):
+    """Prime agent as teacher and send first question."""
+    global session_state
+    session_state[chat_id] = "in_lesson"
+
+    # Prime silently (no typing indicator — student doesn't see this exchange)
+    await asyncio.to_thread(send_to_agent, TEACHER_CONTEXT)
+
+    payloads = await send_with_typing(ctx, chat_id, "เริ่มโจทย์ข้อที่ 1 ได้เลยครับ")
+    await deliver_all(ctx, chat_id, payloads)
+
+
+async def handle_answer(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    global active_chat_id
+    query = update.callback_query
+    await query.answer()
+    chat_id = query.from_user.id
+
+    if active_chat_id != chat_id or session_state.get(chat_id) != "in_lesson":
+        return
+
+    chosen = query.data.replace("ans:", "")
+    await query.edit_message_reply_markup(reply_markup=None)
+
+    payloads = await send_with_typing(ctx, chat_id, f"answer:{chosen}")
+    await deliver_all(ctx, chat_id, payloads)
+
+    if any(p.get("type") == "summary" for p in payloads):
+        await asyncio.to_thread(send_to_agent, "/end")
+        active_chat_id = None
+        session_state.pop(chat_id, None)
+        log.info(f"Session ended: chat_id={chat_id}")
+
+
+async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    global active_chat_id
+    chat_id = update.effective_user.id
+    text = update.message.text.strip()
+
+    if active_chat_id != chat_id:
+        if active_chat_id is not None:
+            await update.message.reply_text("⏳ มีนักเรียนอยู่ใน session แล้วครับ กรุณารอสักครู่...")
         else:
-            await msg.edit_text(f"❌ {feedback}\n\nPlease send the correct tx hash, or try again.")
-            return PAYING
+            await update.message.reply_text("กรุณาพิมพ์ /start เพื่อเริ่มเรียนครับ 📖")
+        return
 
-    async def choose_age(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-        query = update.callback_query
-        await query.answer()
-        sessions[query.message.chat_id]["age"] = query.data.split(":")[1]
-        keyboard = [
-            [InlineKeyboardButton("🌱 Beginner",     callback_data="level:beginner")],
-            [InlineKeyboardButton("🌿 Intermediate", callback_data="level:intermediate")],
-            [InlineKeyboardButton("🌳 Advanced",     callback_data="level:advanced")],
-        ]
-        await query.edit_message_text("What level?", reply_markup=InlineKeyboardMarkup(keyboard))
-        return CHOOSE_LEVEL
+    state = session_state.get(chat_id, "in_lesson")
 
-    async def choose_level(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-        query = update.callback_query
-        await query.answer()
-        sessions[query.message.chat_id]["level"] = query.data.split(":")[1]
-        topics = [t for t in VOCAB_BANKS if t != "default"]
-        keyboard = [[InlineKeyboardButton(t.title(), callback_data=f"topic:{t}")] for t in topics]
-        await query.edit_message_text("Choose a topic:", reply_markup=InlineKeyboardMarkup(keyboard))
-        return CHOOSE_TOPIC
+    if state == "waiting_payment":
+        payloads = await send_with_typing(ctx, chat_id, text)
+        await deliver_all(ctx, chat_id, payloads)
 
-    async def choose_topic(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-        query = update.callback_query
-        await query.answer()
-        chat_id = query.message.chat_id
-        s = sessions[chat_id]
-        s["topic"] = query.data.split(":")[1]
-        s["questions"] = build_lesson_questions(s["age"], s["level"], s["topic"])
-        s["current"] = 0
-        s["score"] = 0
-        await query.edit_message_text(
-            f"📚 Topic: *{s['topic'].title()}* | {len(s['questions'])} questions\n\nType /stop to end.",
-            parse_mode="Markdown",
-        )
-        await _send_question(chat_id, ctx)
-        return IN_LESSON
+        ptype = payloads[0].get("type", "text") if payloads else "text"
+        if ptype == "payment_ok":
+            await _start_lesson(ctx, chat_id)
+        return
 
-    async def _send_question(chat_id: int, ctx: ContextTypes.DEFAULT_TYPE):
-        s = sessions[chat_id]
-        idx = s["current"]
-        total = len(s["questions"])
-        if idx >= total:
-            pct = int(s["score"] / total * 100)
-            await ctx.bot.send_message(
-                chat_id,
-                f"🎊 Lesson complete!\n\nScore: {s['score']}/{total} ({pct}%)\n"
-                + ("⭐⭐⭐ Outstanding!" if pct >= 80 else "👍 Keep practicing!"),
-            )
-            sessions.pop(chat_id, None)
-            return
-        text, choices = format_question(s["questions"][idx], idx + 1, total)
-        if choices:
-            keyboard = [[InlineKeyboardButton(c, callback_data=f"ans:{c}")] for c in choices]
-            await ctx.bot.send_message(chat_id, text, reply_markup=InlineKeyboardMarkup(keyboard))
-        else:
-            await ctx.bot.send_message(chat_id, text)
+    # in_lesson
+    payloads = await send_with_typing(ctx, chat_id, text)
+    await deliver_all(ctx, chat_id, payloads)
 
-    async def handle_answer_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-        query = update.callback_query
-        await query.answer()
-        chat_id = query.message.chat_id
-        if chat_id not in sessions:
-            await query.edit_message_text("Session expired. Type /start to begin.")
-            return IN_LESSON
-        s = sessions[chat_id]
-        ok, fb = check_answer(s, query.data.split(":", 1)[1])
-        if ok:
-            s["score"] += 1
-        await ctx.bot.send_message(chat_id, fb, parse_mode="Markdown")
-        s["current"] += 1
-        await _send_question(chat_id, ctx)
-        return IN_LESSON
-
-    async def handle_text_answer(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-        chat_id = update.effective_chat.id
-        if chat_id not in sessions:
-            await update.message.reply_text("Type /start to begin!")
-            return IN_LESSON
-        s = sessions[chat_id]
-        ok, fb = check_answer(s, update.message.text)
-        if ok:
-            s["score"] += 1
-        await update.message.reply_text(fb, parse_mode="Markdown")
-        s["current"] += 1
-        await _send_question(chat_id, ctx)
-        return IN_LESSON
-
-    async def cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-        sessions.pop(update.effective_chat.id, None)
-        await update.message.reply_text("Cancelled. Type /start to begin a new lesson. 👋")
-        return ConversationHandler.END
-
-    app = Application.builder().token(token).build()
-    conv = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
-        states={
-            PAYING:      [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_payment)],
-            CHOOSE_AGE:  [CallbackQueryHandler(choose_age,  pattern="^age:")],
-            CHOOSE_LEVEL:[CallbackQueryHandler(choose_level, pattern="^level:")],
-            CHOOSE_TOPIC:[CallbackQueryHandler(choose_topic, pattern="^topic:")],
-            IN_LESSON:   [
-                CallbackQueryHandler(handle_answer_button, pattern="^ans:"),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_answer),
-            ],
-        },
-        fallbacks=[CommandHandler("cancel", cancel), CommandHandler("stop", cancel)],
-        allow_reentry=True,
-    )
-    app.add_handler(conv)
-    return app
-
-
-# ── Dry-run simulation ───────────────────────────────────────────────────────
-
-async def dry_run_simulation():
-    print("=== DRY RUN: teach-eng Bot (Crypto Payment + Lesson) ===\n")
-    WALLET_DISPLAY = os.getenv("WALLET_ADDRESS", "0xf0189A9b34239DC69B9294Fe681115d342962295")
-
-    print("── Step 1: Payment prompt ──────────────────────────────")
-    print(f"Bot: Welcome! Pay {LESSON_PRICE_USDT} USDT to:")
-    print(f"     {WALLET_DISPLAY}")
-    print("     Supported: ETH / BSC / Polygon\n")
-
-    print("── Step 2: TX verification (simulated) ─────────────────")
-    fake_tx = "0x" + "ab" * 32
-    print(f"User: {fake_tx}")
-    print("Bot:  🔍 Verifying on-chain...")
-    # Simulate verification result (skip real network call in dry-run)
-    print("Bot:  ✅ [DRY-RUN] Payment verified! 1.00 USDT on Polygon\n")
-
-    print("── Step 3: Lesson flow ─────────────────────────────────")
-    age, level, topic = "kids", "beginner", "animals"
-    questions = build_lesson_questions(age, level, topic)
-    print(f"Session: {age}/{level}/{topic} — {len(questions)} questions\n")
-
-    score = 0
-    for i, q in enumerate(questions):
-        text, choices = format_question(q, i + 1, len(questions))
-        print(f"{text}")
-        if choices:
-            for j, c in enumerate(choices):
-                print(f"  [{j+1}] {c}")
-            correct_ans = q["answer"]
-            print(f"> [simulated]: {correct_ans}")
-            ok, fb = check_answer({"questions": questions, "current": i}, correct_ans)
-            print(f"Bot: {fb}\n")
-            if ok:
-                score += 1
-        else:
-            print("  [info — no answer]\n")
-
-    pct = int(score / len(questions) * 100) if questions else 0
-    print(f"🎊 Lesson complete! Score: {score}/{len(questions)} ({pct}%)")
-    print("\n[DRY RUN] All OK — no Telegram API calls, no real tx checked.")
+    if any(p.get("type") == "summary" for p in payloads):
+        await asyncio.to_thread(send_to_agent, "/end")
+        active_chat_id = None
+        session_state.pop(chat_id, None)
 
 
 def main():
-    if DRY_RUN or not BOT_TOKEN:
-        if not DRY_RUN and not BOT_TOKEN:
-            print("[WARN] TELEGRAM_BOT_TOKEN not set — running dry-run\n")
-        asyncio.run(dry_run_simulation())
-        return
-
-    try:
-        from telegram.ext import Application  # noqa: F401
-    except ImportError:
-        print("[ERROR] python-telegram-bot not installed. Run: bash scripts/setup.sh")
-        sys.exit(1)
-
-    app = _setup_bot(BOT_TOKEN)
-    logger.info("teach-eng bot starting (payment: %s USDT → %s)", LESSON_PRICE_USDT, WALLET_ADDRESS)
+    log.info(f"Starting bot | session={SESSION_ID} | gateway={HELL_FACTORY_URL}")
+    app = Application.builder().token(TELEGRAM_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(handle_answer, pattern=r"^ans:"))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.run_polling(drop_pending_updates=True)
 
 

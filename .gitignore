@@ -39,3 +39,12 @@ design*.md
 planning*.md
 poc*.md
 DESIGN.md
+interface/chat-logs/*.json
+
+# Interface runtime data
+interface/config.json
+interface/sessions.json
+interface/wallet_history.json
+interface/playwright-report/
+interface/test-results/
+session.json

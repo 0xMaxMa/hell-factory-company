@@ -172,3 +172,17 @@ describe('getEarningsDisplay', () => {
     expect(getEarningsDisplay(job)).toBe('N/A')
   })
 })
+
+describe('parseEarnings', () => {
+  it('parses BNB value from string', async () => {
+    const { parseEarnings } = await import('@/lib/jobs')
+    expect(parseEarnings('0.05 BNB')).toBe(0.05)
+    expect(parseEarnings('1.234 BNB')).toBe(1.234)
+  })
+  it('returns 0 for N/A or empty', async () => {
+    const { parseEarnings } = await import('@/lib/jobs')
+    expect(parseEarnings('N/A')).toBe(0)
+    expect(parseEarnings('')).toBe(0)
+    expect(parseEarnings(undefined)).toBe(0)
+  })
+})

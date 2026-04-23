@@ -30,9 +30,10 @@ function timeAgo(iso: string): string {
 
 interface Props {
   onResume: (session: Session) => void
+  onDelete?: (id: string) => void
 }
 
-export default function ActiveSessionsTable({ onResume }: Props) {
+export default function ActiveSessionsTable({ onResume, onDelete }: Props) {
   const { data, mutate } = useSWR<{ sessions: Session[] }>('/api/sessions', fetcher, {
     refreshInterval: 5000,
   })
@@ -42,6 +43,7 @@ export default function ActiveSessionsTable({ onResume }: Props) {
   async function handleDelete(id: string) {
     await fetch(`/api/sessions/${id}`, { method: 'DELETE' })
     mutate()
+    onDelete?.(id)
   }
 
   async function handleStop(id: string) {

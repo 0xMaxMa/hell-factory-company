@@ -10,13 +10,12 @@ export default function ConfigPage() {
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  const [walletAddress, setWalletAddress] = useState<string>('')
 
   const [config, setConfig] = useState({
     gatewayUrl: '',
     apiKey: '',
     agentId: '',
-    bnbAddress: '',
-    bscscanApiKey: '',
     workspacePath: '',
     maxConcurrent: 20,
     autoRun: false,
@@ -30,6 +29,11 @@ export default function ConfigPage() {
         const stored = localStorage.getItem('hf_config')
         if (stored) { try { setConfig(JSON.parse(stored)) } catch {} }
       })
+
+    fetch('/api/wallet/address')
+      .then(r => r.json())
+      .then(d => { if (d.address) setWalletAddress(d.address) })
+      .catch(() => {})
   }, [])
 
   const jobs: JobWorkspace[] = jobsData?.jobs || []
@@ -99,21 +103,14 @@ export default function ConfigPage() {
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Agent ID</div>
             <input className="input" value={config.agentId} onChange={e => setField('agentId', e.target.value)} placeholder="indian-programmer" />
           </label>
-        </div>
-      </div>
-
-      {/* Wallet */}
-      <div className="card">
-        <div style={{ fontWeight: 600, marginBottom: 16 }}>Wallet</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <label>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>BNB Address</div>
-            <input className="input" value={config.bnbAddress} onChange={e => setField('bnbAddress', e.target.value)} placeholder="0x..." />
-          </label>
-          <label>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>BSCScan API Key</div>
-            <input className="input" type="password" value={config.bscscanApiKey} onChange={e => setField('bscscanApiKey', e.target.value)} placeholder="••••••••" />
-          </label>
+          {walletAddress && (
+            <div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Wallet Address (from agent)</div>
+              <div style={{ fontFamily: 'monospace', fontSize: 13, padding: '8px 12px', background: 'var(--surface)', borderRadius: 6, border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                {walletAddress}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
