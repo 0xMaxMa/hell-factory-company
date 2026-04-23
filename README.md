@@ -189,15 +189,11 @@ Every job lives in `job_workspaces/<job-name>/` with a standard structure:
     "apis": ["telegram-bot-api"],
     "packages": ["python-telegram-bot>=20.0"]
   },
-  "bot": {
-    "token": "...",
-    "username": "bot_username",
-    "url": "https://t.me/bot_username"
-  },
   "tags": ["telegram", "education"],
   "run_count": 0,
   "total_earnings": "0",
-  "last_run": null
+  "last_run": null,
+  "enabled": true
 }
 ```
 
@@ -212,27 +208,29 @@ Every job lives in `job_workspaces/<job-name>/` with a standard structure:
 ### System Overview
 
 ```
-+------------------+     +-------------------+     +------------------+
-|   Telegram User  |     |  Claude Gateway   |     |  Hell Factory    |
-|   (Customer)     |     |  (localhost:3000)  |     |  Interface       |
-|                  |     |                   |     |  (localhost:4200) |
-+--------+---------+     +--------+----------+     +--------+---------+
++------------------+     +------------------+     +-------------------+
+|   Telegram User  |     |  Hell Factory    |     |  Claude Gateway   |
+|   (Customer)     |     |  Interface       |     |  (localhost:3000)  |
+|                  |     |  (localhost:4200) |     |                   |
++--------+---------+     +--------+---------+     +--------+----------+
          |                        |                         |
          |  /start               |                         |
          +-----> bot.py -------->| POST /api/v1/chat       |
          |       (Telegram bot)  |  session_id + message   |
-         |                       |  +--------------------->|
-         |                       |  |                      |
-         |                       |  | POST /api/v1/agents/ |
-         |                       |  |   indian-programmer/ |
-         |                       |  |   messages           |
-         |                       |<-+                      |
          |                       |                         |
-         |                       | (runs /job-run skill)   |
-         |                       | (checks payment)        |
-         |                       | (verifies on BNB Chain) |
+         |                       |  POST /api/v1/agents/   |
+         |                       |    indian-programmer/   |
+         |                       |    messages             |
+         |                       |------------------------>|
          |                       |                         |
-         |  JSON response        |                         |
+         |                       |                         | (runs /job-run skill)
+         |                       |                         | (checks payment)
+         |                       |                         | (verifies on BNB Chain)
+         |                       |                         |
+         |                       |  { response: "JSON" }   |
+         |                       |<------------------------|
+         |                       |                         |
+         |  { response: "JSON" } |                         |
          |<----- bot.py <--------|                         |
          |  (inline keyboard)    |                         |
          |                       |                         |
@@ -270,7 +268,7 @@ Every job lives in `job_workspaces/<job-name>/` with a standard structure:
 7. Customer sends /start in Telegram
    |
    v
-8. bot.py -> /api/v1/chat -> Gateway -> /job-run skill
+8. bot.py -> Hell Factory /api/v1/chat -> Gateway /api/v1/agents/.../messages -> /job-run skill
    |
    v
 9. Payment gate:
@@ -360,6 +358,13 @@ Base URL: `http://localhost:4200`
 | POST | `/api/gateway/messages` | Proxy to Claude Gateway (SSE streaming) |
 | GET | `/api/gateway/status` | Check gateway health |
 
+### Config
+
+| Method | Route | Description |
+|---|---|---|
+| GET | `/api/config` | Get gateway configuration |
+| POST | `/api/config` | Update gateway configuration |
+
 ### Sessions
 
 | Method | Route | Description |
@@ -367,7 +372,10 @@ Base URL: `http://localhost:4200`
 | GET | `/api/sessions` | List all sessions |
 | POST | `/api/sessions` | Create new session |
 | GET | `/api/sessions/[id]` | Get session details |
+| PATCH | `/api/sessions/[id]` | Update session status |
+| DELETE | `/api/sessions/[id]` | Delete session |
 | POST | `/api/sessions/[id]/messages` | Send message to session (UI chat) |
+| GET | `/api/sessions/[id]/gateway-sync` | Sync session with Claude Gateway |
 
 ### Jobs
 
@@ -376,15 +384,18 @@ Base URL: `http://localhost:4200`
 | GET | `/api/jobs` | List jobs (`?all=1` includes drafts) |
 | GET | `/api/jobs/[name]` | Get job details |
 | GET | `/api/jobs/[name]/runbook` | Get RUNBOOK.md content |
-| POST | `/api/jobs/[name]/toggle` | Enable/disable job |
+| PATCH | `/api/jobs/[name]/toggle` | Enable/disable job |
 
 ### Wallet & Payments
 
 | Method | Route | Description |
 |---|---|---|
 | GET | `/api/wallet` | Current balance (BNB, USDT, Venus positions) |
-| GET | `/api/wallet/history` | Daily balance snapshots (for charts) |
 | GET | `/api/wallet/address` | Get wallet address |
+| GET | `/api/wallet/history` | Daily balance snapshots (for charts) |
+| GET | `/api/wallet/incoming` | Incoming transaction history |
+| GET | `/api/wallet/snapshot` | Save hourly balance snapshot (cron) |
+| GET | `/api/wallet/transactions` | BNB transactions with job attribution |
 | GET | `/api/payments` | List recorded payments |
 | POST | `/api/payments` | Record new payment |
 | POST | `/api/dispatch` | Launch multiple jobs in parallel |
@@ -397,7 +408,7 @@ Base URL: `http://localhost:4200`
 # 1. Start the interface
 cd interface
 npm install
-npm run dev    # runs on port 4200
+make start     # runs on port 4200 (or: npx next dev --port 4200)
 
 # 2. Ensure Claude Gateway is running on port 3000
 
