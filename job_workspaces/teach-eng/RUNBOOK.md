@@ -55,9 +55,11 @@ bash /home/dev/projects/hell-factory-company/job_workspaces/teach-eng/scripts/se
 ### Step 4: รัน bot.py ใน background
 
 ```bash
-TELEGRAM_BOT_TOKEN="8612385914:AAH_HVfo0v1O4KrymjCPt02sm1vEhYuGG5I" \
-HELL_FACTORY_URL="http://localhost:4200" \
-HELL_FACTORY_API_KEY="hell-factory-api-key" \
+# Load secrets from .env file
+set -a
+source /home/dev/projects/hell-factory-company/job_workspaces/teach-eng/config/.env
+set +a
+
 JOB_SESSION_ID="$SESSION_ID" \
 nohup python3 /home/dev/projects/hell-factory-company/job_workspaces/teach-eng/scripts/bot.py \
   > /home/dev/projects/hell-factory-company/job_workspaces/teach-eng/logs/bot.log 2>&1 &

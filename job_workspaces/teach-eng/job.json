@@ -4,22 +4,27 @@
   "category": "education",
   "status": "ready",
   "created_at": "2026-04-22T19:44:00Z",
-  "updated_at": "2026-04-22T19:44:00Z",
+  "updated_at": "2026-04-23T04:43:00Z",
   "estimated_earnings": "TBD",
   "risk_level": "low",
   "requires": {
     "wallet": false,
     "initial_capital": "$5",
-    "apis": ["telegram-bot-api"],
-    "packages": ["python-telegram-bot>=20.0"]
+    "apis": [
+      "telegram-bot-api"
+    ],
+    "packages": [
+      "python-telegram-bot>=20.0"
+    ]
   },
-  "bot": {
-    "token": "8612385914:AAH_HVfo0v1O4KrymjCPt02sm1vEhYuGG5I",
-    "username": "eng_by_indian_programmer_bot",
-    "url": "https://t.me/eng_by_indian_programmer_bot"
-  },
-  "tags": ["telegram", "education", "english", "vocabulary", "bot"],
-  "run_count": 1,
+  "tags": [
+    "telegram",
+    "education",
+    "english",
+    "vocabulary",
+    "bot"
+  ],
+  "run_count": 2,
   "total_earnings": "0",
-  "last_run": "2026-04-22T20:51:39Z"
+  "last_run": "2026-04-23T04:36:13Z"
 }
