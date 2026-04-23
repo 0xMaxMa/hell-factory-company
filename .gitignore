@@ -34,6 +34,7 @@ Thumbs.db
 logs/
 
 # Research / temp
+archive/
 research/tmp/
 design*.md
 planning*.md
@@ -48,3 +49,4 @@ interface/wallet_history.json
 interface/playwright-report/
 interface/test-results/
 session.json
+bot.log

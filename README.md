@@ -29,8 +29,6 @@
 
 AI-powered autonomous business platform — deploy Claude agents to run real businesses, earn revenue through Telegram bots and DeFi, collect crypto payments on BNB Chain, and reinvest.
 
-> Give AI $100. Watch it work.
-
 ---
 
 ## Project Structure
@@ -40,6 +38,7 @@ hell-factory-company/
 ├── interface/               # Next.js app — dashboard, API gateway, wallet tracking
 ├── job_workspaces/          # Ready-to-run job agents
 │   ├── teach-eng/           # English teaching Telegram bot
+│   ├── lnw-xo/             # Tic-Tac-Toe game with crypto payout
 │   ├── lending-venus/       # Venus Protocol DeFi (deposit/withdraw)
 │   ├── test-echo/           # Minimal test job
 │   └── test-paid/           # Payment flow test job
@@ -126,21 +125,24 @@ Runs a job from `job_workspaces/`, starts the bot, handles payment verification,
 
 ### Setting Up Skill Symlinks
 
-Skills live in `skills/` but Claude Gateway reads them from the agent's workspace. Create symlinks:
+Skills source code lives in this project at `skills/`. Claude Gateway reads skills from each agent's workspace directory. To connect them, create symlinks **from** the agent workspace **to** this project:
 
 ```bash
-# From the agent workspace skills directory:
+# Target: agent workspace skills directory
 cd ~/.claude-gateway/agents/<agent-id>/workspace/skills/
 
-# Create symlinks pointing to the project skills:
+# Create symlinks pointing back to this project's skills:
 ln -s /home/dev/projects/hell-factory-company/skills/job-research job-research
 ln -s /home/dev/projects/hell-factory-company/skills/job-run job-run
 ln -s /home/dev/projects/hell-factory-company/skills/crypto-wallet crypto-wallet
 ```
 
-Gateway hot-reloads — no restart needed after creating symlinks.
+This means:
+- **Source of truth**: `hell-factory-company/skills/` (edit skills here)
+- **Gateway reads from**: `~/.claude-gateway/agents/<agent-id>/workspace/skills/` (symlinks)
+- Gateway hot-reloads — no restart needed after creating or updating symlinks
 
-**Current symlinks for `indian-programmer` agent:**
+**Example for `indian-programmer` agent:**
 
 ```
 ~/.claude-gateway/agents/indian-programmer/workspace/skills/
@@ -425,3 +427,18 @@ No database — all state persists in JSON files under `interface/`:
 | `wallet_history.json` | Daily wallet balance snapshots |
 | `config.json` | Gateway URL, API key, agent ID |
 | `chat-logs/<session-id>.json` | Message history per session |
+
+---
+
+## Disclaimer
+
+This project is a **proof of concept (POC)** for educational and experimental purposes only.
+
+- **Not production-ready** — no authentication on API routes, no rate limiting, no input sanitization beyond basic checks
+- **No database** — all state stored in JSON files (no ACID guarantees, no concurrent write safety)
+- **Private keys** — stored in plaintext `.env` files on disk, not in a secure vault or HSM
+- **Payment verification** — relies on BSCScan API and basic on-chain checks; not battle-tested against sophisticated attacks
+- **Single-process architecture** — no redundancy, no health checks, no auto-restart
+- **Telegram bot tokens** — stored locally, no token rotation or revocation mechanism
+
+**Do not deploy this to production or use with real funds without a thorough security audit.** Use at your own risk.
