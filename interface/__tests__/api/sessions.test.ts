@@ -155,12 +155,14 @@ describe('DELETE /api/sessions/[id]', () => {
     expect(body.ok).toBe(true)
   })
 
-  it('refuses to delete active session (409)', async () => {
+  it('deletes active session and kills bot process', async () => {
     const session = await createSession('test-echo', 'active')
     const { DELETE } = await import('@/app/api/sessions/[id]/route')
     const req = new Request(`http://localhost/api/sessions/${session.id}`, { method: 'DELETE' })
     const res = await DELETE(req, { params: Promise.resolve({ id: session.id }) })
-    expect(res.status).toBe(409)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.ok).toBe(true)
   })
 
   it('returns 404 for unknown session', async () => {

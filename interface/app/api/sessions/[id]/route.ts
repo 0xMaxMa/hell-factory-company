@@ -1,5 +1,14 @@
+import { execSync } from 'child_process'
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession, updateSession, deleteSession } from '@/lib/sessions'
+
+function killBotProcess(jobSlug: string): void {
+  try {
+    execSync(`pkill -f "job_workspaces/${jobSlug}/scripts/"`, { stdio: 'ignore' })
+  } catch {
+    // process not running — ignore
+  }
+}
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -18,9 +27,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params
   const session = getSession(id)
   if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 })
-  if (session.status === 'active') {
-    return NextResponse.json({ error: 'Cannot delete an active session' }, { status: 409 })
-  }
+  killBotProcess(session.jobSlug)
   deleteSession(id)
   return NextResponse.json({ ok: true })
 }
